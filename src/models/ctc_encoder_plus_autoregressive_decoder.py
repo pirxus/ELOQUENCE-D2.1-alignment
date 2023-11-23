@@ -81,7 +81,7 @@ class Seq2SeqLMOutputLosses(Seq2SeqLMOutput):
     encoder_logits: Optional[torch.FloatTensor] = None
 
 
-def wav2vec2_for_ctc_forward_hook(_: AutoModelForCTC, __: Any, output: CausalLMOutput):
+def wav2vec2_for_ctc_forward_hook(model: AutoModelForCTC, input: Any, output: CausalLMOutput):
     if "hidden_states" in output:
         output.last_hidden_state = output.hidden_states[-1]
 
@@ -165,7 +165,9 @@ class JointCTCAttentionEncoderDecoder(SpeechEncoderDecoderModel):
         if config.shared_lm_head:
             self.encoder.lm_head.weight = self.decoder.lm_head.weight
 
-        if config.decoder_pos_emb_fixed:
+        if (hasattr(config, "decoder_pos_emb_fixed") and config.decoder_pos_emb_fixed) or (
+            hasattr(config.decoder, "pos_emb_fixed") and config.decoder.pos_emb_fixed
+        ):
             from transformers.models.transfo_xl.modeling_transfo_xl import (
                 AdaptiveEmbedding,
                 PositionalEmbedding,
@@ -188,9 +190,9 @@ class JointCTCAttentionEncoderDecoder(SpeechEncoderDecoderModel):
     @classmethod
     def from_encoder_decoder_pretrained(
         cls,
-        *model_args,
         encoder_pretrained_model_name_or_path: str = None,
         decoder_pretrained_model_name_or_path: str = None,
+        *model_args,
         **kwargs,
     ) -> PreTrainedModel:
 
@@ -223,9 +225,7 @@ class JointCTCAttentionEncoderDecoder(SpeechEncoderDecoderModel):
 
             if "config" not in kwargs_encoder:
                 encoder_config, kwargs_encoder = AutoConfig.from_pretrained(
-                    encoder_pretrained_model_name_or_path,
-                    **kwargs_encoder,
-                    return_unused_kwargs=True,
+                    encoder_pretrained_model_name_or_path, **kwargs_encoder, return_unused_kwargs=True
                 )
 
                 if encoder_config.is_decoder is True or encoder_config.add_cross_attention is True:
@@ -253,9 +253,7 @@ class JointCTCAttentionEncoderDecoder(SpeechEncoderDecoderModel):
 
             if "config" not in kwargs_decoder:
                 decoder_config, kwargs_decoder = AutoConfig.from_pretrained(
-                    decoder_pretrained_model_name_or_path,
-                    **kwargs_decoder,
-                    return_unused_kwargs=True,
+                    decoder_pretrained_model_name_or_path, **kwargs_decoder, return_unused_kwargs=True
                 )
 
                 if decoder_config.is_decoder is False or decoder_config.add_cross_attention is False:
@@ -610,10 +608,7 @@ class JointCTCAttentionEncoderDecoder(SpeechEncoderDecoderModel):
             )
             stopping_criteria = validate_stopping_criteria(stopping_criteria, max_length)
         if len(stopping_criteria) == 0:
-            warnings.warn(
-                "You don't have defined any stopping_criteria, this will likely loop forever",
-                UserWarning,
-            )
+            warnings.warn("You don't have defined any stopping_criteria, this will likely loop forever", UserWarning)
         pad_token_id = pad_token_id if pad_token_id is not None else self.generation_config.pad_token_id
         eos_token_id = eos_token_id if eos_token_id is not None else self.generation_config.eos_token_id
         if isinstance(eos_token_id, int):
@@ -679,10 +674,8 @@ class JointCTCAttentionEncoderDecoder(SpeechEncoderDecoderModel):
         external_lm = model_kwargs["external_lm"]
         if external_lm is not None:
             external_lm = external_lm.to(self.device)
-            from transformers import AutoTokenizer
-
-            tokenizer = AutoTokenizer.from_pretrained("Lakoc/ted_uni500")
-            tokenizer.decoder.replacement = "+"
+            # from transformers import AutoTokenizer
+            # tokenizer = AutoTokenizer.from_pretrained("Lakoc/ted_uni500")
         external_lm_weight = model_kwargs["external_lm_weight"]
 
         # initialise score of first beam with 0 and the rest with -1e9. This makes sure that only tokens
@@ -690,6 +683,8 @@ class JointCTCAttentionEncoderDecoder(SpeechEncoderDecoderModel):
         beam_scores = torch.zeros((batch_size, num_beams), dtype=torch.float, device=input_ids.device)
         beam_scores[:, 1:] = -1e9
         beam_scores = beam_scores.view((batch_size * num_beams,))
+        # print("\n", "-" * 100, "\n", "-" * 100, "\n")
+        # print("Reference:", tokenizer.batch_decode(model_kwargs["labels"].tolist()))
 
         this_peer_finished = False  # used by synced_gpus only
         while True:
@@ -723,9 +718,27 @@ class JointCTCAttentionEncoderDecoder(SpeechEncoderDecoderModel):
             # hack: adjust tokens for Marian. For Marian we have to make sure that the `pad_token_id`
             # cannot be generated both before and after the `nn.functional.log_softmax` operation.
             next_token_logits = self.adjust_logits_during_generation(next_token_logits, cur_len=cur_len)
-            next_token_scores = nn.functional.log_softmax(
+            next_token_scores_dec = nn.functional.log_softmax(
                 next_token_logits, dim=-1
             )  # (batch_size * num_beams, vocab_size)
+
+            """
+            Sample next tokens that will be used for CTC prefix computation and compute CTC cumulative prefix scores
+            """
+            # print("\n\n")
+            # print("Input:", tokenizer.batch_decode(input_ids.tolist()))
+            # print("Acoustic:",
+            #       torch.topk(next_token_scores, 5).values, "\n",
+            #       tokenizer.batch_decode(torch.topk(next_token_scores, 5).indices.tolist()))
+            next_token_scores_dec[:, self.generation_config.pad_token_id] = ctc_prefix_scorer.logzero
+            local_best_scores, local_best_ids = torch.topk(next_token_scores_dec, ctc_beam_width, dim=1)
+
+            ctc_scores, ctc_states = ctc_prefix_scorer(input_ids, ctc_states, local_best_ids, att_w)
+            next_token_scores = (1 - ctc_weight) * next_token_scores_dec + ctc_weight * ctc_scores
+
+            # print("CTC:",
+            #       torch.topk(ctc_scores, 5).values, "\n",
+            #       tokenizer.batch_decode(torch.topk(ctc_scores, 5).indices.tolist()))
 
             if external_lm is not None:
                 external_lm_logits = external_lm(
@@ -734,35 +747,16 @@ class JointCTCAttentionEncoderDecoder(SpeechEncoderDecoderModel):
                 external_lm_logits = external_lm_logits[:, -1, :]
                 external_lm_logits = self.adjust_logits_during_generation(external_lm_logits, cur_len=cur_len)
                 external_lm_scores = nn.functional.log_softmax(external_lm_logits, dim=-1)
-                print()
-
-                print("Input:", tokenizer.batch_decode(input_ids.tolist()))
-                print(
-                    "Accustic:",
-                    torch.topk(next_token_scores, 5).values,
-                    tokenizer.batch_decode(torch.topk(next_token_scores, 5).indices.tolist()),
-                )
-                print(
-                    "LM:",
-                    torch.topk(external_lm_scores, 5).values,
-                    tokenizer.batch_decode(torch.topk(external_lm_scores, 5).indices.tolist()),
-                )
                 next_token_scores = next_token_scores + external_lm_weight * external_lm_scores
-                print(
-                    "LM+Accustic:",
-                    torch.topk(next_token_scores, 5).values,
-                    tokenizer.batch_decode(torch.topk(next_token_scores, 5).indices.tolist()),
-                )
+            else:
+                external_lm_scores = torch.zeros_like(next_token_scores)
 
-            """
-            Sample next tokens that will be used for CTC prefix computation and compute CTC cumulative prefix scores
-            """
-            next_token_scores[:, self.generation_config.pad_token_id] = ctc_prefix_scorer.logzero
-            local_best_scores, local_best_ids = torch.topk(next_token_scores, ctc_beam_width, dim=1)
-
-            ctc_scores, ctc_states = ctc_prefix_scorer(input_ids, ctc_states, local_best_ids, att_w)
-            next_token_scores = (1 - ctc_weight) * next_token_scores + ctc_weight * ctc_scores
-
+            #     print("LM:",
+            #           torch.topk(external_lm_scores, 5).values, "\n",
+            #           tokenizer.batch_decode(torch.topk(external_lm_scores, 5).indices.tolist()))
+            # print("LM+Acoustic:",
+            #       torch.topk(next_token_scores, 5).values, "\n",
+            #       tokenizer.batch_decode(torch.topk(next_token_scores, 5).indices.tolist()))
             next_token_scores_processed = logits_processor(input_ids, next_token_scores)
 
             next_token_scores = next_token_scores_processed + beam_scores[:, None].expand_as(next_token_scores)
@@ -770,7 +764,7 @@ class JointCTCAttentionEncoderDecoder(SpeechEncoderDecoderModel):
             # Store scores, attentions and hidden_states when required
             if return_dict_in_generate:
                 if output_scores:
-                    scores += (next_token_scores_processed,)
+                    scores += (next_token_scores_processed, next_token_scores_dec, ctc_scores, external_lm_scores)
                 if output_attentions:
                     decoder_attentions += (
                         (outputs.decoder_attentions,) if self.config.is_encoder_decoder else (outputs.attentions,)
@@ -854,6 +848,11 @@ class JointCTCAttentionEncoderDecoder(SpeechEncoderDecoderModel):
             max_length=stopping_criteria.max_length,
             beam_indices=beam_indices,
         )
+        # ref = tokenizer.decode(model_kwargs['labels'].tolist()[0], skip_special_tokens=True)
+        # hyp = tokenizer.decode(sequence_outputs['sequences'][0].tolist(), skip_special_tokens=True)
+        # print(f"Ref: {ref}\nHyp: {hyp}")
+        # import jiwer
+        # print(jiwer.compute_measures(ref, hyp))
 
         if return_dict_in_generate:
             if not output_scores:
