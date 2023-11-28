@@ -62,11 +62,19 @@ class KaldiDataset(datasets.GeneratorBasedBuilder):
         ]
         return splits
 
+    @staticmethod
+    def _split_text_string(text):
+        """Split text string into uttid and transcript"""
+        parts = text.strip().split(maxsplit=1)
+        if len(parts) == 1:
+            parts.append("")
+        return parts
+
     def _fetch_split_meta(self, split: str):
         """Fetch split meta data from kaldi-like dataset"""
 
         with open(os.path.join(self.data_dir, split, _FILEPATHS["transcripts"])) as file:
-            texts = dict(map(lambda line: line.strip().split(maxsplit=1), file))  # creates (segment_id -> text) mapping
+            texts = dict(map(lambda line: self._split_text_string(line), file))  # creates (segment_id -> text) mapping
 
         with open(os.path.join(self.data_dir, split, _FILEPATHS["segments"])) as file:
             segments = dict(
