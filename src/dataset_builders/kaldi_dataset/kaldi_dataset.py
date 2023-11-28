@@ -76,10 +76,13 @@ class KaldiDataset(datasets.GeneratorBasedBuilder):
         with open(os.path.join(self.data_dir, split, _FILEPATHS["transcripts"])) as file:
             texts = dict(map(lambda line: self._split_text_string(line), file))  # creates (segment_id -> text) mapping
 
-        with open(os.path.join(self.data_dir, split, _FILEPATHS["segments"])) as file:
-            segments = dict(
-                map(lambda s: self._parse_segment_info(*s.strip().split()), file)
-            )  # creates (segment_id -> wav_id, start, end) mapping
+        segments_file = os.path.join(self.data_dir, split, _FILEPATHS["segments"])
+        if os.path.exists(segments_file):
+            with open(segments_file) as file:
+                segments = dict(map(lambda s: self._parse_segment_info(*s.strip().split()), file))
+        else:
+            """If segments file does not exist, create dummy mapping (segment_id -> (segment_id, 0, -1))"""
+            segments = dict(map(lambda s: (s, (s, 0, -1)), texts.keys()))
 
         # load kaldiio feature generator
         featfile = os.path.join(self.data_dir, split, _FILEPATHS["feats"])
@@ -125,7 +128,7 @@ class KaldiDataset(datasets.GeneratorBasedBuilder):
     @staticmethod
     def _crop_audio(audio, sampling_rate, start, end):
         """Crop audio"""
-        return audio[math.floor(sampling_rate * start) : math.ceil(end * sampling_rate)]
+        return audio[math.floor(sampling_rate * start) : math.ceil(end * sampling_rate) if end != -1 else end]
 
     @staticmethod
     def preprocess_text(utterance_batch: List[str]):
