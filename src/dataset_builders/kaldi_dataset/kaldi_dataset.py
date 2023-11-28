@@ -3,7 +3,7 @@ import logging
 import math
 import os
 from itertools import groupby
-from typing import Iterable, List, Tuple, Union
+from typing import Iterable, List, Optional, Tuple, Union
 
 import datasets
 import kaldiio
@@ -21,12 +21,12 @@ _FILEPATHS = {
 class KaldiDataset(datasets.GeneratorBasedBuilder):
     """Dataset builder for Fisher dataset"""
 
-    DEFAULT_WRITER_BATCH_SIZE = 50  # the default size of the batch may not fit in memory
+    DEFAULT_WRITER_BATCH_SIZE = 100  # the default size of the batch may not fit in memory
 
-    def __init__(self, metadata_dir: os.PathLike, splits: List[str], sampling_rate: int = 16000, **kwargs):
-        super().__init__(**kwargs)
+    def __init__(self, data_dir: Optional[str], splits: List[str], sampling_rate: int = 16000, **kwargs):
+        super().__init__(data_dir=data_dir, **kwargs)
         self.sampling_rate = sampling_rate
-        self.data_dir = metadata_dir
+        self.data_dir = data_dir
         self.splits = splits
 
     def _info(self):
@@ -112,7 +112,7 @@ class KaldiDataset(datasets.GeneratorBasedBuilder):
                 audio_cropped = self._crop_audio(audio, self.sampling_rate, start, end)
                 text = self.preprocess_text(transcript)
                 yield f"{recording}_{index}", {
-                    "input_values": audio_cropped,
+                    "audio": {"path": recording, "array": audio_cropped, "sampling_rate": sampling_rate},
                     "labels": text,
                     "uttid": uttid,
                     "recording": recording,
