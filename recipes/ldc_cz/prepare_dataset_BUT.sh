@@ -25,7 +25,7 @@ unset PYTHONHOME
 source /mnt/matylda5/ipoloka/miniconda3/bin/activate /mnt/matylda5/ipoloka/envs/hugginface_asr
 
 # Ensure work directory exists
-METADATA_DIR="/mnt/matylda5/iveselyk/KALDI_DATAPREPS/CZECH_BroadcastNewsConvs_LDC/data"
+METADATA_DIR="/mnt/matylda5/ipoloka/projects/huggingface_asr/metadata_dirs/ldc_cz"
 WORK_DIR="/mnt/matylda5/ipoloka/projects/huggingface_asr"
 
 cd $WORK_DIR || {
@@ -40,4 +40,4 @@ python src/dataset_builders/preprocess_dataset.py \
   --dataset_builder src/dataset_builders/kaldi_dataset \
   --metadata_dir $METADATA_DIR \
   --num_proc 16 \
-  --splits Czech-BNC-LDC_train Czech-BNC-LDC_dev Czech-BNC-LDC_test
+  --splits train dev test

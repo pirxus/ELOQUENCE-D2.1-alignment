@@ -2,7 +2,7 @@
 #$ -N Fisher_prep
 #$ -q long.q@@blade
 #$ -l ram_free=4G,mem_free=4G
-#$ -l matylda5=0.05,matylda4=0.05
+#$ -l matylda5=0.05,matylda3=0.05
 #$ -pe smp 16
 #$ -o /mnt/matylda5/ipoloka/projects/huggingface_asr/fisher_swbd_v2.o
 #$ -e /mnt/matylda5/ipoloka/projects/huggingface_asr/fisher_swbd_v2.e
@@ -25,7 +25,7 @@ unset PYTHONHOME
 source /mnt/matylda5/ipoloka/miniconda3/bin/activate /mnt/matylda5/ipoloka/envs/hugginface_asr
 
 # Ensure work directory exists
-METADATA_DIR="/mnt/matylda3/karafiat/BABEL/GIT/Babel-Kaldi/egs/fisher_swbd/s5/data"
+METADATA_DIR="/mnt/matylda5/ipoloka/projects/huggingface_asr/metadata_dirs/fisher_swbd"
 WORK_DIR="/mnt/matylda5/ipoloka/projects/huggingface_asr"
 
 cd $WORK_DIR || {
@@ -40,4 +40,4 @@ python src/dataset_builders/preprocess_dataset.py \
   --dataset_builder src/dataset_builders/kaldi_dataset \
   --metadata_dir $METADATA_DIR \
   --num_proc 16 \
-  --splits train_all eval2000 rt03
+  --splits train dev test
