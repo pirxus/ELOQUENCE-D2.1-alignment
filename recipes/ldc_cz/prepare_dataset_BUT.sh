@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/bin/bash -l
 #$ -N Fisher_prep
 #$ -q long.q@@blade
 #$ -l ram_free=2G,mem_free=2G
@@ -35,6 +35,7 @@ cd $WORK_DIR || {
 export HF_DATASETS_OFFLINE=1
 export HF_HUB_OFFLINE=1
 export HF_HOME="${WORK_DIR}/hf_cache"
+export PATH="/mnt/matylda5/ipoloka/utils:$PATH"
 
 python src/dataset_builders/preprocess_dataset.py \
   --dataset_builder src/dataset_builders/kaldi_dataset \

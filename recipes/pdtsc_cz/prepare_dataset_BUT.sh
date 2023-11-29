@@ -25,7 +25,7 @@ unset PYTHONHOME
 source /mnt/matylda5/ipoloka/miniconda3/bin/activate /mnt/matylda5/ipoloka/envs/hugginface_asr
 
 # Ensure work directory exists
-METADATA_DIR="/mnt/matylda5/iveselyk/KALDI_DATAPREPS/CZECH_PDTSC_2.0/data/"
+METADATA_DIR="/mnt/matylda5/ipoloka/projects/huggingface_asr/metadata_dirs/pdstc_cz"
 WORK_DIR="/mnt/matylda5/ipoloka/projects/huggingface_asr"
 
 cd $WORK_DIR || {
@@ -35,9 +35,10 @@ cd $WORK_DIR || {
 export HF_DATASETS_OFFLINE=1
 export HF_HUB_OFFLINE=1
 export HF_HOME="${WORK_DIR}/hf_cache"
+export PATH="/mnt/matylda5/ipoloka/utils:$PATH"
 
 python src/dataset_builders/preprocess_dataset.py \
   --dataset_builder src/dataset_builders/kaldi_dataset \
   --metadata_dir $METADATA_DIR \
   --num_proc 16 \
-  --splits Czech-PDTSC20_train Czech-PDTSC20_dev Czech-PDTSC20_test
+  --splits train dev test
