@@ -1,7 +1,7 @@
 #!/bin/bash
 #$ -N Fisher_prep
 #$ -q long.q@@blade
-#$ -l ram_free=0.2G,mem_free=0.2G
+#$ -l ram_free=2G,mem_free=2G
 #$ -l matylda5=0.1
 #$ -pe smp 16
 #$ -o /mnt/matylda5/ipoloka/projects/huggingface_asr/parczech_cz.o
