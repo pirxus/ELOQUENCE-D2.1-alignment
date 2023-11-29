@@ -1,33 +1,33 @@
-# How to clone the template
-This is a template repo. If you want to create a new repo out of it then:
+# Extension of the HuggingFace Transformers for Automatic Speech Recognition
 
-## GUI
-1. Visit https://git.fit.vutbr.cz/ or https://github.com/BUTSpeechFIT/ and start to create your new repo
-2. There is `Template` select box at _git.fit.vutbr.cz_ where you can select this repo and then
-  - Check Git content to copy the content of the template. We are interested just in the YAMLs 
-3. There is no import option at _github.com_
+## Setup
 
-## CMD
-1. Clone the repo `git clone git@git.fit.vutbr.cz:szoke/repo_template_python.git` / `git clone git@github.com:BUTSpeechFIT/repo_template_python.git`
-2. Create your repo `git init sample`
-3. Copy the yamls `cp ./repo_template_python/*.yaml ./sample/`
+1. BUT SGE Cluster setup
+   1. Clone repository and change directory to project root.
+   2. Set ENVS_ROOT.
+      ```shell
+      ENVS_ROOT=/mnt/matylda5/ipoloka/envs
+       ```
+   3. Create conda environment
+      ```shell
+      conda create -p "${ENVS_ROOT}/huggingface_asr" python=3.10
+       ```
+   4. Activate conda environment
+       ```shell
+      conda activate "${ENVS_ROOT}/huggingface_asr"
+       ```
+   5. Install requirements
+      ```shell
+      pip install -r requirements_BUT_cluster.txt
+      ```
+   6. Extend PYTHONPATH with sources root
+      ```shell
+      export PYTHONPATH="${PYTHONPATH}:${PWD}/src"
+      ```
+   7. Run following command and test if help message was printed.
+      ```shell
+      python src/trainers/train_enc_dec_asr.py -h
+      ```
 
-# How to activate the hooks
-1. Install the pre-commit tool using `pip install pre-commit` in your conda env (if you already do not have one).
-2. Select your configuration according to your python version `cp .pre-commit-config-py310.yaml .pre-commit-config.yaml`
-3. Run `pre-commit install --hook-type pre-commit --hook-type pre-push` to install the hooks
-4. Thats all.
-
-# TODOs
-- Can we get rid of python version dependency? (to have one yaml serve to all?)
-- Is there simpler way of how to do this exercise using command line?
-
-# Notes & sources:
-https://pre-commit.com/
-
-There is a way how to automatically install pre-commit to your newly created repo from your local settings:
-https://pre-commit.com/#automatically-enabling-pre-commit-on-repositories
-but this was not tested.
-
-If you need to change the Python version, edit the yaml and update the expected Python version.
-
+## Training
+Recipes are provided in the `recipes` directory. Each recipe contains a `run.sh` script that can be used to train a model. The script contains all the necessary commands to train a model. The script can be run directly or it can be submitted to the SLURM cluster.
