@@ -21,7 +21,7 @@ _FILEPATHS = {
 class KaldiDataset(datasets.GeneratorBasedBuilder):
     """Dataset builder for Fisher dataset"""
 
-    DEFAULT_WRITER_BATCH_SIZE = 100  # the default size of the batch may not fit in memory
+    DEFAULT_WRITER_BATCH_SIZE = 50  # the default size of the batch may not fit in memory
 
     def __init__(self, data_dir: Optional[str], splits: List[str], sampling_rate: int = 16000, **kwargs):
         super().__init__(data_dir=data_dir, **kwargs)
