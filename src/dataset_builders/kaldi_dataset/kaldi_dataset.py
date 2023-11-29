@@ -128,7 +128,7 @@ class KaldiDataset(datasets.GeneratorBasedBuilder):
     @staticmethod
     def _crop_audio(audio, sampling_rate, start, end):
         """Crop audio"""
-        return audio[math.floor(sampling_rate * start) : math.ceil(end * sampling_rate) if end != -1 else end]
+        return audio[math.floor(sampling_rate * start) : math.ceil(end * sampling_rate) if end != -1 else end].copy()
 
     @staticmethod
     def preprocess_text(utterance_batch: List[str]):
