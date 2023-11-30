@@ -1,7 +1,9 @@
 """Kaldi dataset builder"""
+import io
 import logging
 import math
 import os
+import wave
 from itertools import groupby
 from typing import Iterable, List, Optional, Tuple, Union
 
@@ -31,9 +33,17 @@ class KaldiDataset(datasets.GeneratorBasedBuilder):
 
     def _info(self):
         return datasets.DatasetInfo(
-            description="",
+            features=datasets.Features(
+                {
+                    "labels": datasets.Value("string"),
+                    "uttid": datasets.Value("string"),
+                    "recording": datasets.Value("string"),
+                    "turn_index": datasets.Value("int32"),
+                    "input_len": datasets.Value("float32"),
+                    "audio": datasets.Audio(sampling_rate=16_000),
+                }
+            ),
             supervised_keys=None,
-            homepage="",
         )
 
     def _prepare_split_single(
@@ -94,6 +104,26 @@ class KaldiDataset(datasets.GeneratorBasedBuilder):
             "features": feats_generator,
         }
 
+    @staticmethod
+    def create_wav_bytes(audio_samples, sample_rate=16000):
+        # Ensure the audio samples are in the correct format (16-bit PCM)
+        audio_samples = np.int16(audio_samples * 32767)
+
+        # Create a WAV file in-memory
+        wav_buffer = io.BytesIO()
+        with wave.open(wav_buffer, "w") as wav_file:
+            # Set the WAV file parameters
+            wav_file: wave.Wave_write
+            wav_file.setnchannels(1)  # Mono audio
+            wav_file.setsampwidth(2)  # 16-bit PCM
+            wav_file.setframerate(sample_rate)
+            wav_file.setnframes(len(audio_samples))
+            wav_file.writeframes(audio_samples.tobytes())
+
+        # Get the WAV file content as bytes
+        wav_bytes = wav_buffer.getvalue()
+        return wav_bytes
+
     def _generate_examples(self, recordings, features):
         """Generator for split examples fetching"""
         for recording, segments in recordings:
@@ -112,7 +142,7 @@ class KaldiDataset(datasets.GeneratorBasedBuilder):
                 audio_cropped = self._crop_audio(audio, self.sampling_rate, start, end)
                 text = self.preprocess_text(transcript)
                 yield f"{recording}_{index}", {
-                    "audio": {"path": recording, "array": audio_cropped, "sampling_rate": sampling_rate},
+                    "audio": {"path": None, "bytes": self.create_wav_bytes(audio_cropped)},
                     "labels": text,
                     "uttid": uttid,
                     "recording": recording,
