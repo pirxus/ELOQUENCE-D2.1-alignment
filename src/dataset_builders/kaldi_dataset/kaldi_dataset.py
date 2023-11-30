@@ -33,16 +33,6 @@ class KaldiDataset(datasets.GeneratorBasedBuilder):
 
     def _info(self):
         return datasets.DatasetInfo(
-            features=datasets.Features(
-                {
-                    "labels": datasets.Value("string"),
-                    "uttid": datasets.Value("string"),
-                    "recording": datasets.Value("string"),
-                    "turn_index": datasets.Value("int32"),
-                    "input_len": datasets.Value("float32"),
-                    "audio": datasets.Audio(sampling_rate=16_000),
-                }
-            ),
             supervised_keys=None,
         )
 
