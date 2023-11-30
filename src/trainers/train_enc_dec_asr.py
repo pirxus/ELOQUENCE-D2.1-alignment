@@ -1,10 +1,10 @@
-import os
+"""Main training script for training of attention based encoder decoder ASR models."""
+import sys
 
 from datasets import load_dataset, load_from_disk
 from transformers import (
     AutoConfig,
     AutoFeatureExtractor,
-    AutoModelForCausalLM,
     AutoModelForSpeechSeq2Seq,
     AutoTokenizer,
     EarlyStoppingCallback,
@@ -24,13 +24,16 @@ from trainers.training_arguments import (
     GenerationArguments,
     ModelArguments,
 )
-from utils import (
+from training_utils import (
     AdditionalLossPrinterCallback,
     AdditionalLossTrackerTrainer,
+    AugmentationManagerCallback,
     Seq2SeqDataCollatorWithPadding,
     activate_joint_decoding,
     average_checkpoints,
     compute_metrics,
+    do_evaluate,
+    do_generate,
     fetch_AED_config,
     prepare_dataset,
 )
@@ -65,7 +68,7 @@ if __name__ == "__main__":
     text_column = data_args.text_column_name
     audio_column = data_args.audio_column_name
     sampling_rate = model_args.sampling_rate
-    max_input_len = (data_args.max_duration_in_seconds,)
+    max_input_len = data_args.max_duration_in_seconds
     min_input_len = data_args.min_duration_in_seconds
 
     # 3. Preprocess dataset
@@ -79,7 +82,6 @@ if __name__ == "__main__":
         preprocessing_num_workers=data_args.preprocessing_num_workers,
         writer_batch_size=data_args.writer_batch_size,
         train_split=data_args.train_split,
-        validation_split=data_args.validation_split,
         fix_apostrophes=data_args.fix_apostrophes,
         remove_train_unks=data_args.remove_train_unks,
         apply_augmentations=data_args.apply_augmentations,
@@ -87,12 +89,11 @@ if __name__ == "__main__":
         sampling_rate=sampling_rate,
         max_input_len=max_input_len,
         min_input_len=min_input_len,
-        validation_slice=data_args.validation_slice,
     )
 
     if training_args.preprocess_dataset_only:
         logger.info("Finished preprocessing dataset.")
-        exit(0)
+        sys.exit(0)
 
     base_model_config = {
         "bos_token_id": tokenizer.bos_token_id,
@@ -107,7 +108,7 @@ if __name__ == "__main__":
         "encoder_layerdrop": 0.0,
         "min_length": 0,
         "no_repeat_ngram_size": 0,
-        "early_stopping": "never",
+        "early_stopping": False,
         "length_penalty": gen_args.length_penalty,
         "max_length": gen_args.max_len,
         "num_beams": gen_args.num_beams,
@@ -181,6 +182,8 @@ if __name__ == "__main__":
 
     # 5. Init trainer
     callbacks = []
+    if training_args.apply_spec_augment:
+        callbacks.append(AugmentationManagerCallback(training_args.num_steps_to_activate_spec_augment))
     if training_args.early_stopping_patience > -1:
         callbacks.append(EarlyStoppingCallback(early_stopping_patience=training_args.early_stopping_patience))
     if training_args.track_ctc_loss:
@@ -195,54 +198,54 @@ if __name__ == "__main__":
         rename_features=training_args.collator_rename_features,
     )
     trainer_class = AdditionalLossTrackerTrainer if training_args.track_ctc_loss else Seq2SeqTrainer
+    training_eval_dataset = (
+        dataset[data_args.validation_split].select(range(data_args.validation_slice))
+        if data_args.validation_slice
+        else dataset[data_args.validation_split]
+    )
     trainer = trainer_class(
         args=training_args,
         model=model,
         callbacks=callbacks,
         train_dataset=dataset[data_args.train_split],
-        eval_dataset=dataset[data_args.validation_split],
+        eval_dataset=training_eval_dataset,
         data_collator=data_collator,
         compute_metrics=lambda pred: compute_metrics(tokenizer, pred, gen_args.wandb_predictions_to_save),
     )
 
     # 6. Train
     if training_args.do_train:
-        trainer.train(resume_from_checkpoint=training_args.restart_from or None)
-
-    # 7. Evaluation
-    if training_args.do_eval:
-        if gen_args.decoding_ctc_weight > 0 or gen_args.external_lm_weight > 0:
-            external_lm = None
-            if gen_args.external_lm is not None:
-                external_lm = AutoModelForCausalLM.from_pretrained(gen_args.external_lm)
-                external_lm.eval()
+        if gen_args.decoding_ctc_weight > 0 and training_args.joint_decoding_during_training:
             activate_joint_decoding(
                 model,
                 gen_args.decoding_ctc_weight,
                 gen_args.ctc_margin,
                 len(tokenizer),
                 base_model_config["eos_token_id"],
-                external_lm,
-                gen_args.external_lm_weight,
+                None,
+                0,
             )
-        predictions = trainer.predict(
-            dataset[data_args.validation_split],
-            output_hidden_states=True,
-            num_beams=model.generation_config.num_beams * gen_args.eval_beam_factor,
-        )
-        logger.info(compute_metrics(tokenizer, predictions))
-        with open(
-            os.path.join(training_args.output_dir, "val_predictions"), "w"
-        ) as fp:  # Overwrites any existing file.
-            fp.write(str(predictions))
+        trainer.train(resume_from_checkpoint=training_args.restart_from or None)
 
-        predictions = trainer.predict(
-            dataset[data_args.test_split],
-            output_hidden_states=True,
-            num_beams=model.generation_config.num_beams * gen_args.eval_beam_factor,
+    # 7. Evaluation
+    if training_args.do_evaluate:
+        do_evaluate(
+            trainer=trainer,
+            dataset=dataset,
+            model=model,
+            tokenizer=tokenizer,
+            gen_args=gen_args,
+            training_args=training_args,
+            eos_token_id=base_model_config["eos_token_id"],
         )
-        logger.info(compute_metrics(tokenizer, predictions))
-        with open(
-            os.path.join(training_args.output_dir, "test_predictions"), "w"
-        ) as fp:  # Overwrites any existing file.
-            fp.write(str(predictions))
+    if training_args.do_generate:
+        do_generate(
+            trainer=trainer,
+            dataset=dataset,
+            model=model,
+            tokenizer=tokenizer,
+            gen_args=gen_args,
+            training_args=training_args,
+            eos_token_id=base_model_config["eos_token_id"],
+            gen_config=gen_config,
+        )

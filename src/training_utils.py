@@ -1,17 +1,21 @@
 import glob
+import math
 import os
+import pickle  # nosec
 import shutil
 from dataclasses import dataclass, field, make_dataclass
 from typing import Dict, List, Optional, Union
 
 import numpy as np
+import pandas as pd
 import torch
-import wandb
-from audiomentations import Compose, TimeStretch
+import tqdm
 from datasets import Dataset
 from jiwer import cer, compute_measures
+from torchaudio.transforms import SpeedPerturbation
 from transformers import (
     AutoConfig,
+    AutoModelForCausalLM,
     BatchFeature,
     LogitsProcessor,
     LogitsProcessorList,
@@ -28,6 +32,7 @@ from transformers.pytorch_utils import ALL_LAYERNORM_LAYERS
 from transformers.trainer_pt_utils import get_parameter_names
 from transformers.utils import logging
 
+import wandb
 from models.ctc_encoder_plus_autoregressive_decoder import (
     JointCTCAttentionEncoderDecoderConfig,
 )
@@ -78,6 +83,22 @@ def compute_metrics(tokenizer, pred, wandb_pred_to_save=10):
         write_wandb_pred(pred_str, label_str, rows_to_log=wandb_pred_to_save)
 
     return {"cer": cer(label_str, pred_str), **metrics}
+
+
+class AugmentationManagerCallback(TrainerCallback):
+    def __init__(self, activate_aug_after_steps):
+        super().__init__()
+        self.activate_aug_after_steps = activate_aug_after_steps
+
+    def on_init_end(self, args: TrainingArguments, state: TrainerState, control: TrainerControl, **kwargs):
+        model = kwargs["model"]
+        model.encoder.config.apply_spec_augment = False
+
+    def on_step_end(self, args: TrainingArguments, state: TrainerState, control: TrainerControl, **kwargs):
+        if state.global_step == self.activate_aug_after_steps:
+            model = kwargs["model"]
+            model.encoder.config.apply_spec_augment = True
+            logger.info(f"Step: {state.global_step} augmentations activated.")
 
 
 class FrozenLayersManager(TrainerCallback):
@@ -211,7 +232,6 @@ class AdditionalLossTrackerTrainer(Seq2SeqTrainer):
             self.state.additional_logs.append([outputs.enc_loss.mean(), outputs.dec_loss.mean()])
 
         # Save past state if it exists
-        # TODO: this needs to be fixed and made cleaner later.
         if self.args.past_index >= 0:
             self._past = outputs[self.args.past_index]
 
@@ -394,13 +414,13 @@ def preprocess_cv_labels(batch: List[str], label_column: str):
 
 
 def filter_out_sequence_from_dataset(
-    df: Dataset, max_input_len: float = 5.0, min_input_len: float = 0.1, length_column="input_len"
+    dataset: Dataset, max_input_len: float = 5.0, min_input_len: float = 0.1, length_column="input_len"
 ) -> Dataset:
     """Filters out sequences form dataset which are longer than provided threshold"""
-    lengths = np.array(df[length_column])
+    lengths = np.array(dataset[length_column])
     indexes_ok = np.argwhere(np.logical_and(lengths <= max_input_len, lengths >= min_input_len))
-    df = df.select(indexes_ok.flatten())
-    return df
+    dataset = dataset.select(indexes_ok.flatten())
+    return dataset
 
 
 def group_params(model, weight_decay, learning_rate, cross_attention_scaling_factor):
@@ -451,8 +471,8 @@ def fetch_AED_config(enc_config_path, dec_config_path, base_config, config_overr
     config = JointCTCAttentionEncoderDecoderConfig.from_encoder_decoder_configs(enc_config, dec_config)
     if config_overrides is not None:
         logger.info(f"Overriding config: {config_overrides}")
-        d = dict(x.split("=") for x in config_overrides.split(","))
-        base_config.update(d)
+        parsed_dict = dict(x.split("=") for x in config_overrides.split(","))
+        base_config.update(parsed_dict)
     kwargs_encoder = {
         argument[len("encoder_") :]: value for argument, value in base_config.items() if argument.startswith("encoder_")
     }
@@ -476,7 +496,6 @@ def prepare_dataset(
     preprocessing_num_workers,
     writer_batch_size,
     train_split,
-    validation_split,
     fix_apostrophes,
     remove_train_unks,
     apply_augmentations,
@@ -484,7 +503,6 @@ def prepare_dataset(
     sampling_rate,
     max_input_len,
     min_input_len,
-    validation_slice,
 ):
     if length_column_name not in dataset[train_split].column_names:
         logger.info(f"Extracting audio lens.")
@@ -558,36 +576,18 @@ def prepare_dataset(
 
     if apply_augmentations:
         logger.info(f"Setting augmentations transform.")
-        augmenter = Compose(
-            [
-                #     TimeMask(max_band_part=0.05, p=0.05),
-                #     TimeMask(max_band_part=0.05, p=0.05),
-                #     TimeMask(max_band_part=0.05, p=0.05),
-                #     TimeMask(max_band_part=0.05, p=0.05),
-                #     AddGaussianNoise(min_amplitude=0.001, max_amplitude=0.015, p=0.2),
-                TimeStretch(min_rate=0.9, max_rate=1.1, p=0.5),
-                #     PitchShift(min_semitones=-4, max_semitones=4, p=0.2),
-                #     Shift(min_fraction=-0.5, max_fraction=0.5, p=0.2),
-                #     TanhDistortion(min_distortion=0, max_distortion=0.2, p=0.2)
-            ]
-        )
+        speed_perturb = SpeedPerturbation(sampling_rate, [0.9, 1.1, 1.0])
         dataset[train_split].set_transform(
             lambda batch: {
                 audio_column_name: [
-                    augmenter(
-                        np.array(audio_object_stripper(audio), dtype=np.float32),
-                        sample_rate=sampling_rate,
-                    )
+                    speed_perturb(torch.tensor(audio_object_stripper(audio), dtype=torch.float32))[0].detach().numpy()
                     for audio in batch[audio_column_name]
                 ]
             },
             columns=[audio_column_name],
             output_all_columns=True,
         )
-
-    if validation_slice:
-        logger.info(f"Selecting specified part of validation indexes.")
-        dataset[validation_split] = dataset[validation_split].select(range(validation_slice))
+    logger.info(str(dataset))
     return dataset
 
 
@@ -654,3 +654,140 @@ def average_checkpoints(experiment_dir):
     shutil.copytree(os.path.join(experiment_dir, "feature_extractor"), dst_path, dirs_exist_ok=True)
     torch.save(average_dict, os.path.join(dst_path, "pytorch_model.bin"))
     return dst_path
+
+
+def save_nbests(path, nbests, scores, labels, tokenizer, group_size=1, batch_size=1, outputs=None):
+    nbests = [tokenizer.decode(elem.tolist(), skip_special_tokens=True) for item in nbests for elem in item.unbind()]
+    processed_labels = []
+    if outputs is not None:
+        for index, output in enumerate(outputs):
+            with open(path + f"_utterance{index * batch_size}-{(index + 1) * batch_size - 1}.pkl", "wb") as f:
+                pickle.dump(output, f, protocol=pickle.HIGHEST_PROTOCOL)
+
+    for label in labels:
+        label[label == -100] = tokenizer.pad_token_id
+        processed_labels.extend(
+            [
+                tokenizer.decode(elem.tolist(), skip_special_tokens=True)
+                for elem in label.repeat_interleave(group_size, dim=0)
+            ]
+        )
+    scores = [float(elem) for item in scores for elem in item.unbind()]
+    with open(path + "_scores.txt", "w") as f1:
+        with open(path + "_hyps.txt", "w") as f2:
+            with open(path + "_refs.txt", "w") as f3:
+                for item, (sample, score, ref) in enumerate(zip(nbests, scores, processed_labels)):
+                    utterance_id = f"utterance{item // group_size}-{item % group_size + 1}"
+                    f1.write(f"{utterance_id} {score}\n")
+                    f2.write(f"{utterance_id} {sample}\n")
+                    f3.write(f"{utterance_id} {ref}\n")
+
+
+def save_predictions(tokenizer, predictions, path):
+    pred_ids = predictions.predictions
+
+    label_ids = predictions.label_ids
+    label_ids[label_ids == -100] = tokenizer.pad_token_id
+
+    pred_str = tokenizer.batch_decode(pred_ids, skip_special_tokens=True)
+    label_str = [label if label else "-" for label in tokenizer.batch_decode(label_ids, skip_special_tokens=True)]
+    df = pd.DataFrame({"label": label_str, "prediction": pred_str})
+    df.to_csv(path, index=False)
+
+
+def check_and_activate_joint_decoding(gen_args, model, tokenizer, eos_token_id):
+    if gen_args.decoding_ctc_weight > 0 or gen_args.external_lm_weight > 0:
+        external_lm = None
+        if gen_args.external_lm is not None:
+            external_lm = AutoModelForCausalLM.from_pretrained(gen_args.external_lm)
+            external_lm.eval()
+        activate_joint_decoding(
+            model,
+            gen_args.decoding_ctc_weight,
+            gen_args.ctc_margin,
+            len(tokenizer),
+            eos_token_id,
+            external_lm,
+            gen_args.external_lm_weight,
+        )
+
+
+def do_evaluate(trainer, dataset, model, tokenizer, gen_args, training_args, eos_token_id):
+    check_and_activate_joint_decoding(gen_args, model, tokenizer, eos_token_id)
+
+    trainer.args.per_device_eval_batch_size = math.ceil(
+        trainer.args.per_device_eval_batch_size / gen_args.eval_beam_factor
+    )
+    for split in training_args.evaluation_splits:
+        predictions = trainer.predict(
+            dataset[split],
+            output_hidden_states=True,
+            num_beams=model.generation_config.num_beams * gen_args.eval_beam_factor,
+        )
+        logger.info(f"Metrics for {split} split: {predictions.metrics}")
+        save_predictions(
+            tokenizer,
+            predictions,
+            f"{training_args.output_dir}/" f'predictions_{split}_wer{100 * predictions.metrics["test_wer"]:.2f}.csv',
+        )
+
+
+def move_to_cpu(obj):
+    if isinstance(obj, torch.Tensor):
+        return obj.cpu()
+    elif isinstance(obj, dict):
+        return {key: move_to_cpu(value) for key, value in obj.items()}
+    elif isinstance(obj, tuple):
+        return tuple(move_to_cpu(item) for item in obj)
+    else:
+        return obj
+
+
+def postprocess_beam_outputs(outputs):
+    for key in outputs:
+        outputs[key] = move_to_cpu(outputs[key])
+    outputs["joint_scores"] = outputs["scores"][::4]
+    outputs["dec_scores"] = outputs["scores"][1::4]
+    outputs["ctc_scores"] = outputs["scores"][2::4]
+    outputs["external_lm_scores"] = outputs["scores"][3::4]
+    outputs = dict(outputs)
+    del outputs["scores"]
+    del outputs["encoder_hidden_states"]
+    del outputs["decoder_hidden_states"]
+    return outputs
+
+
+def do_generate(trainer, dataset, model, tokenizer, gen_args, training_args, gen_config, eos_token_id):
+    check_and_activate_joint_decoding(gen_args, model, tokenizer, eos_token_id)
+
+    gen_config.num_return_sequences = gen_args.num_predictions_to_return
+    gen_config.return_dict_in_generate = True
+    gen_config.num_beams = model.generation_config.num_beams * gen_args.eval_beam_factor
+    gen_config.output_scores = True
+    trainer.args.per_device_eval_batch_size = math.ceil(
+        trainer.args.per_device_eval_batch_size / gen_args.eval_beam_factor
+    )
+    for split in training_args.evaluation_splits:
+        logger.info(f"Generating predictions for split: {split}")
+        dataloader = trainer.get_eval_dataloader(dataset[split])
+        n_bests = []
+        scores = []
+        labels = []
+        outputs_agg = []
+        for sample in tqdm.tqdm(dataloader):
+            outputs = model.generate(generation_config=gen_config, **sample)
+            if gen_args.save_output_states:
+                outputs_agg.append(postprocess_beam_outputs(outputs))
+            n_bests.append(outputs.sequences)
+            scores.append(outputs.sequences_scores)
+            labels.append(sample["labels"])
+        save_nbests(
+            gen_args.nbest_path_to_save + "_" + split,
+            n_bests,
+            scores,
+            labels,
+            tokenizer,
+            group_size=gen_args.num_predictions_to_return,
+            outputs=outputs_agg,
+            batch_size=trainer.args.per_device_eval_batch_size,
+        )
