@@ -67,6 +67,23 @@ class EnforceEosIfCTCStops(LogitsProcessor):
         return scores
 
 
+def compute_metrics_ctc(tokenizer, pred, wandb_pred_to_save=10):
+    pred_logits = pred.predictions
+    pred_ids = np.argmax(pred_logits, axis=-1)
+    pred.label_ids[pred.label_ids == -100] = tokenizer.pad_token_id
+
+    pred_str = tokenizer.batch_decode(pred_ids, skip_special_tokens=True)
+    label_str = [label if label else "-" for label in tokenizer.batch_decode(pred.label_ids, skip_special_tokens=True)]
+    metrics = compute_measures(label_str, pred_str)
+    del metrics["ops"]
+    del metrics["truth"]
+    del metrics["hypothesis"]
+    if wandb.run is not None:
+        write_wandb_pred(pred_str, label_str, rows_to_log=wandb_pred_to_save)
+
+    return {"cer": cer(label_str, pred_str), **metrics}
+
+
 def compute_metrics(tokenizer, pred, wandb_pred_to_save=10):
     pred_ids = pred.predictions
 
@@ -86,18 +103,22 @@ def compute_metrics(tokenizer, pred, wandb_pred_to_save=10):
 
 
 class AugmentationManagerCallback(TrainerCallback):
-    def __init__(self, activate_aug_after_steps):
+    def __init__(self, activate_aug_after_steps, model_config_path="encoder.config"):
         super().__init__()
+        if model_config_path is None:
+            model_config_path = []
         self.activate_aug_after_steps = activate_aug_after_steps
+        self.model_config_path = model_config_path
 
     def on_init_end(self, args: TrainingArguments, state: TrainerState, control: TrainerControl, **kwargs):
         model = kwargs["model"]
-        model.encoder.config.apply_spec_augment = False
+        resolve_attribute_from_nested_class(model, self.model_config_path).apply_spec_augment = False
 
     def on_step_end(self, args: TrainingArguments, state: TrainerState, control: TrainerControl, **kwargs):
-        if state.global_step == self.activate_aug_after_steps:
-            model = kwargs["model"]
-            model.encoder.config.apply_spec_augment = True
+        model = kwargs["model"]
+        config = resolve_attribute_from_nested_class(model, self.model_config_path)
+        if state.global_step >= self.activate_aug_after_steps and not config.apply_spec_augment:
+            config.apply_spec_augment = True
             logger.info(f"Step: {state.global_step} augmentations activated.")
 
 
@@ -358,6 +379,15 @@ class Seq2SeqDataCollatorWithPaddingAndConvId(Seq2SeqDataCollatorWithPadding):
             batch["input_values"] = batch["input_features"]
             del batch["input_features"]
         return batch
+
+
+def resolve_attribute_from_nested_class(obj, attr_spec):
+    for attr in attr_spec.split("."):
+        try:
+            obj = obj[attr]
+        except (TypeError, KeyError):
+            obj = getattr(obj, attr)
+    return obj
 
 
 def filter_sequences_in_range_batched(batch: List[int], max_input_len: int, min_input_len: int):
