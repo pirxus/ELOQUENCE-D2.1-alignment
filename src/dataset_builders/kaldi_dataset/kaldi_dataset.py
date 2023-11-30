@@ -33,6 +33,16 @@ class KaldiDataset(datasets.GeneratorBasedBuilder):
 
     def _info(self):
         return datasets.DatasetInfo(
+            features=datasets.Features(
+                {
+                    "audio": datasets.Audio(sampling_rate=16_000),
+                    "labels": datasets.Value("string"),
+                    "uttid": datasets.Value("string"),
+                    "recording": datasets.Value("string"),
+                    "turn_index": datasets.Value("int32"),
+                    "input_len": datasets.Value("float32"),
+                }
+            ),
             supervised_keys=None,
         )
 
@@ -46,7 +56,6 @@ class KaldiDataset(datasets.GeneratorBasedBuilder):
         check_duplicate_keys: bool,
         job_id: int,
     ) -> Iterable[Tuple[int, bool, Union[int, tuple]]]:
-        self.info.features = None  # Disable unnecessary type check and conversion that slows generation
         return super()._prepare_split_single(
             gen_kwargs, fpath, file_format, max_shard_size, split_info, check_duplicate_keys, job_id
         )
