@@ -61,6 +61,7 @@ if __name__ == "__main__":
         if data_args.validation_slice
         else dataset[data_args.validation_split]
     )
+    logger.info(f"Dataset processed successfully.{dataset}")
 
     if training_args.preprocess_dataset_only:
         logger.info("Finished preprocessing dataset.")
