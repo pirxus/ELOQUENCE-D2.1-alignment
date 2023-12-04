@@ -3,7 +3,7 @@ from torch import nn
 from transformers.activations import ACT2FN
 
 
-class MelFeatureExtractor(nn.Module):
+class Conv2dFeatureExtractor(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.conv = torch.nn.Sequential(
@@ -23,10 +23,10 @@ class MelFeatureExtractor(nn.Module):
             ],
         )
 
-        linear_in_dim = config.conv_dim[-1] * (((config.num_mel_bins - 1) // 2 - 1) // 2)
+        linear_in_dim = config.conv_dim[-1] * (((config.second_dim_input_size - 1) // 2 - 1) // 2)
         self.out = torch.nn.Linear(linear_in_dim, config.hidden_size, bias=True)
 
-    def forward(self, input_values):
+    def forward(self, input_values: torch.Tensor) -> torch.Tensor:
         hidden_states = self.conv(input_values[:, None, ...])
         hidden_states = self.out(hidden_states.transpose(1, 2).flatten(2, 3))
         return hidden_states.transpose(1, 2)

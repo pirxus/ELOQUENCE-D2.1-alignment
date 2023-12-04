@@ -54,17 +54,13 @@ torchrun --standalone \
   --save_total_limit="5" \
   --num_train_epochs="150" \
   --num_beams="4" \
-  --max_len="512" \
+  --max_length="512" \
   --greater_is_better="False" \
   --group_by_length="True" \
   --bf16 \
   --ctc_weight="0.3" \
-  --bos_token="<s>" \
-  --eos_token="</s>" \
-  --pad_token="<pad>" \
-  --mask_token="<mask>" \
   --lsm_factor="0.1" \
-  --use_fbanks \
+  --expect_2d_input \
   --apply_augmentations \
   --predict_with_generate \
   --early_stopping_patience="50" \
@@ -82,5 +78,4 @@ torchrun --standalone \
   --eval_beam_factor="10" \
   --evaluation_splits validation test \
   --joint_decoding_during_training \
-  --apply_spec_augment \
   --num_steps_to_activate_spec_augment=5000

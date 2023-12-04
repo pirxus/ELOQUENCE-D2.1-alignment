@@ -14,7 +14,7 @@ from tokenizers.models import BPE, Unigram
 from transformers import HfArgumentParser, PreTrainedTokenizerFast
 from transformers.utils import logging
 
-from trainers.training_arguments import TokenizerTrainingArguments
+from utilities.training_arguments import TokenizerTrainingArguments
 
 
 def train_tokenizer(
