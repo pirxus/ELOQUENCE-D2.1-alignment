@@ -24,11 +24,7 @@ if __name__ == "__main__":
 
     model_args, data_args, training_args, gen_args = parser.parse_args_into_dataclasses()
 
-    # 1. Create feature extractor and tokenizer
-    feature_extractor = AutoFeatureExtractor.from_pretrained(training_args.feature_extractor_name)
-    tokenizer = AutoTokenizer.from_pretrained(training_args.tokenizer_name)
-
-    # 2. Collect, preprocess dataset and extract evaluation dataset
+    # 1. Collect, preprocess dataset and extract evaluation dataset
     dataset = get_dataset(
         datasets_creation_config_path=data_args.datasets_creation_config,
         dataset_name=data_args.dataset_name,
@@ -43,19 +39,26 @@ if __name__ == "__main__":
         audio_column=data_args.audio_column_name,
         train_split=data_args.train_split,
         validation_split=data_args.validation_split,
-        unk_token=tokenizer.unk_token,
+        unk_token=data_args.unk_token,
         fix_apostrophes=data_args.fix_apostrophes,
         remove_train_unks=data_args.remove_train_unks,
+        do_lower_case=data_args.do_lower_case,
+        remove_punctuation=data_args.remove_punctuation,
     )
     training_eval_dataset = (
         dataset[data_args.validation_split].select(range(data_args.validation_slice))
         if data_args.validation_slice
         else dataset[data_args.validation_split]
     )
+    logger.info(f"Dataset processed successfully.{dataset}")
 
     if training_args.preprocess_dataset_only:
         logger.info("Finished preprocessing dataset.")
         sys.exit(0)
+
+    # 2. Create feature extractor and tokenizer
+    feature_extractor = AutoFeatureExtractor.from_pretrained(training_args.feature_extractor_name)
+    tokenizer = AutoTokenizer.from_pretrained(training_args.tokenizer_name)
 
     # 3. Instantiate model
     model = instantiate_ctc_model(model_args, tokenizer, feature_extractor)
