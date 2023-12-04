@@ -36,8 +36,6 @@ class Wav2Vec2EBranchformerConfig(Wav2Vec2ConformerConfig, Wav2Vec2Config):
 
     def __init__(
         self,
-        second_dim_input_size=None,
-        expect_2d_input=False,
         ebranchformer_conv_dropout=0.1,
         csgu_activation="identity",
         csgu_kernel_size=31,
@@ -47,11 +45,6 @@ class Wav2Vec2EBranchformerConfig(Wav2Vec2ConformerConfig, Wav2Vec2Config):
         **kwargs,
     ):
         super().__init__(**kwargs)
-
-        # Custom params
-        self.second_dim_input_size = second_dim_input_size
-        self.expect_2d_input = expect_2d_input
-
         # EBranchformer related params
         self.csgu_kernel_size = csgu_kernel_size
         self.csgu_activation = csgu_activation
