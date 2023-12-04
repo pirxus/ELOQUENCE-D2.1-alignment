@@ -140,6 +140,12 @@ class DataTrainingArguments:
     fix_apostrophes: Optional[bool] = field(
         default=False, metadata={"help": "Whether to remove trailing spaces from labels."}
     )
+    do_lower_case: Optional[bool] = field(default=False, metadata={"help": "Whether to lowercase labels."})
+    remove_punctuation: Optional[bool] = field(
+        default=False, metadata={"help": "Whether to remove punctuation from labels."}
+    )
+    unk_token: Optional[str] = field(default="<unk>", metadata={"help": "UNK token"})
+
     """Arguments defining structure of the dataset"""
     audio_column_name: Optional[str] = field(
         default="audio",
@@ -181,20 +187,9 @@ class GeneralTrainingArgumentsContext(GeneralTrainingArguments):
 @dataclass
 class TokenizerTrainingArguments:
     _argument_group_name = "Tokenizer related arguments"
-    dataset_name: str = field(metadata={"help": "The name of the dataset to use (via the datasets library)."})
     tokenizer_name: str = field(
         metadata={"help": "The name of the model to be created (via the transformers library)."}
     )
-    dataset_config: Optional[str] = field(
-        default=None, metadata={"help": "The config of the dataset to use (via the datasets library)."}
-    )
-    text_column_name: Optional[str] = field(
-        default="text",
-        metadata={"help": "The name of the dataset column containing the text data. Defaults to 'text'"},
-    )
-    train_split: Optional[str] = field(default="train", metadata={"help": "Training split to be used."})
-    vocab_size: Optional[int] = field(default=5_000, metadata={"help": "Vocab size."})
-    apply_regularization: Optional[bool] = field(default=False, metadata={"help": "Whether to apply regularization."})
     tokenizer_type: Optional[str] = field(
         default="unigram", metadata={"help": "Type of tokenizer to create if does not exists."}
     )
@@ -203,8 +198,9 @@ class TokenizerTrainingArguments:
         metadata={"help": "The input additional raw data file (a text file)."},
     )
     skip_if_exists: Optional[str] = field(default=None, metadata={"help": "Whether to check if tokenizer exists."})
+    vocab_size: Optional[int] = field(default=5_000, metadata={"help": "Vocab size."})
+    apply_regularization: Optional[bool] = field(default=False, metadata={"help": "Whether to apply regularization."})
     pad_token: Optional[str] = field(default="<pad>", metadata={"help": "PAD token"})
     mask_token: Optional[str] = field(default="<mask>", metadata={"help": "MASK token"})
     bos_token: Optional[str] = field(default="<s>", metadata={"help": "BOS token"})
     eos_token: Optional[str] = field(default="</s>", metadata={"help": "EOS token"})
-    unk_token: Optional[str] = field(default="<unk>", metadata={"help": "UNK token"})

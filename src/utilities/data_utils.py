@@ -1,5 +1,7 @@
 """Utilities for data loading and preprocessing."""
 import json
+import re
+import string
 from typing import Dict, List, Union
 
 import numpy as np
@@ -90,6 +92,21 @@ def filter_out_sequence_from_dataset(
     return dataset
 
 
+def do_lower_case_batched(batch: List[str], label_column: str) -> Dict[str, List[str]]:
+    """Lower cases batch."""
+    return {label_column: [example.lower() for example in batch]}
+
+
+def remove_punctuation_batched(batch: List[str], label_column: str) -> Dict[str, List[str]]:
+    """Removes punctuation from batch."""
+    return {label_column: [example.translate(str.maketrans("", "", string.punctuation)) for example in batch]}
+
+
+def remove_multiple_whitespaces_and_strip_batched(batch: List[str], label_column: str) -> Dict[str, List[str]]:
+    """Removes multiple whitespaces from batch."""
+    return {label_column: [re.sub(r"\s+", " ", example).strip() for example in batch]}
+
+
 def prepare_dataset(
     dataset: DatasetDict,
     dataset_name: str,
@@ -101,13 +118,15 @@ def prepare_dataset(
     train_split: str,
     fix_apostrophes: bool,
     remove_train_unks: bool,
+    do_lower_case: bool,
+    remove_punctuation: bool,
     unk_token: str,
     sampling_rate: int,
     max_input_len: float,
     min_input_len: float,
 ) -> DatasetDict:
     """Preprocesses dataset."""
-    if train_split is not None and length_column_name not in dataset[train_split].column_names:
+    if length_column_name not in set().union(*dataset.column_names.values()):
         logger.info(f"Extracting audio lens.")
         dataset = dataset.map(
             extract_lens_batched,
@@ -129,6 +148,28 @@ def prepare_dataset(
             fn_kwargs={"max_input_len": max_input_len, "min_input_len": min_input_len},
         )
 
+    if do_lower_case:
+        logger.info(f"Lower casing dataset.")
+        dataset = dataset.map(
+            do_lower_case_batched,
+            input_columns=[text_column_name],
+            batched=True,
+            num_proc=preprocessing_num_workers,
+            writer_batch_size=writer_batch_size,
+            fn_kwargs={"label_column": text_column_name},
+        )
+
+    if remove_punctuation:
+        logger.info(f"Removing punctuation from dataset.")
+        dataset = dataset.map(
+            remove_punctuation_batched,
+            input_columns=[text_column_name],
+            batched=True,
+            num_proc=preprocessing_num_workers,
+            writer_batch_size=writer_batch_size,
+            fn_kwargs={"label_column": text_column_name},
+        )
+
     logger.info(f"Filtering unlabeled data from dataset.")
     dataset = dataset.filter(
         filter_wrongly_annotated_segments_batched,
@@ -137,7 +178,6 @@ def prepare_dataset(
         writer_batch_size=writer_batch_size,
         num_proc=preprocessing_num_workers,
     )
-
     dataset = dataset.filter(
         filter_empty_transcriptions,
         input_columns=[text_column_name],
@@ -145,8 +185,6 @@ def prepare_dataset(
         writer_batch_size=writer_batch_size,
         num_proc=preprocessing_num_workers,
     )
-
-    dataset = dataset.cast_column(audio_column_name, Audio(sampling_rate=sampling_rate))
 
     if train_split is not None and remove_train_unks:
         logger.info(f"Removing UNKs from training data.")
@@ -158,6 +196,7 @@ def prepare_dataset(
             writer_batch_size=writer_batch_size,
             fn_kwargs={"unk_token": unk_token, "label_column": text_column_name},
         )
+
     if fix_apostrophes:
         logger.info(f"Fixing apostrophes in dataset.")
         dataset = dataset.map(
@@ -179,6 +218,19 @@ def prepare_dataset(
             num_proc=preprocessing_num_workers,
             fn_kwargs={"label_column": text_column_name},
         )
+
+    logger.info("Striping and removing multiple spaces.")
+    dataset = dataset.map(
+        remove_multiple_whitespaces_and_strip_batched,
+        input_columns=[text_column_name],
+        batched=True,
+        num_proc=preprocessing_num_workers,
+        writer_batch_size=writer_batch_size,
+        fn_kwargs={"label_column": text_column_name},
+    )
+
+    logger.info("Casting audio column to Audio.")
+    dataset = dataset.cast_column(audio_column_name, Audio(sampling_rate=sampling_rate))
 
     logger.info(str(dataset))
     return dataset
@@ -273,6 +325,8 @@ def load_multiple_datasets(
             sampling_rate=sampling_rate,
             max_input_len=max_input_len,
             min_input_len=min_input_len,
+            do_lower_case=dataset_config["do_lower_case"],
+            remove_punctuation=dataset_config["remove_punctuation"],
         )
         dataset_renamed = dataset_processed.rename_columns(
             {
@@ -316,6 +370,8 @@ def get_dataset(
     unk_token: str,
     fix_apostrophes: bool,
     remove_train_unks: bool,
+    do_lower_case: bool,
+    remove_punctuation: bool,
 ) -> DatasetDict:
     """Loads single or multiple datasets, preprocess, and merge them."""
     if datasets_creation_config_path is not None:
@@ -356,5 +412,7 @@ def get_dataset(
             sampling_rate=sampling_rate,
             max_input_len=max_input_len,
             min_input_len=min_input_len,
+            do_lower_case=do_lower_case,
+            remove_punctuation=remove_punctuation,
         )
     return dataset
