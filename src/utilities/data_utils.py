@@ -9,6 +9,7 @@ from datasets import (
     Audio,
     Dataset,
     DatasetDict,
+    Value,
     concatenate_datasets,
     load_dataset,
     load_from_disk,
@@ -231,7 +232,7 @@ def prepare_dataset(
 
     logger.info("Casting audio column to Audio.")
     dataset = dataset.cast_column(audio_column_name, Audio(sampling_rate=sampling_rate))
-
+    dataset = dataset.cast_column(length_column_name, Value(dtype="float32"))
     logger.info(str(dataset))
     return dataset
 
