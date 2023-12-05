@@ -18,6 +18,8 @@
     "length_column_name": "input_len",
     "fix_apostrophes": true,
     "remove_train_unks": false,
+    "do_lowercase": true,
+    "remove_punctuation": true,
     "unk_token": "<unk>",
     "additional_args": {
       "data_dir": "/mnt/matylda5/ipoloka/projects/huggingface_asr/metadata_dirs/wsj",
@@ -42,6 +44,8 @@
     "length_column_name": "input_len",
     "fix_apostrophes": true,
     "remove_train_unks": false,
+    "do_lowercase": true,
+    "remove_punctuation": true,
     "unk_token": "<unk>",
     "additional_args": {
       "data_dir": "/mnt/matylda5/ipoloka/projects/huggingface_asr/metadata_dirs/fisher_swbd",
@@ -66,6 +70,8 @@
     "length_column_name": "input_len",
     "fix_apostrophes": true,
     "remove_train_unks": false,
+    "do_lowercase": true,
+    "remove_punctuation": true,
     "unk_token": "<unk>",
     "additional_args": {
       "name": "en"
@@ -89,6 +95,8 @@
     "length_column_name": "input_len",
     "fix_apostrophes": true,
     "remove_train_unks": false,
+    "do_lowercase": true,
+    "remove_punctuation": true,
     "unk_token": "<unk>",
     "additional_args": {
       "name": "release3"
@@ -116,6 +124,8 @@
     "length_column_name": "input_len",
     "fix_apostrophes": true,
     "remove_train_unks": false,
+    "do_lowercase": true,
+    "remove_punctuation": true,
     "unk_token": "<unk>",
     "additional_args": {
       "name": "all"
@@ -139,6 +149,8 @@
     "length_column_name": "input_len",
     "fix_apostrophes": true,
     "remove_train_unks": false,
+    "do_lowercase": true,
+    "remove_punctuation": true,
     "unk_token": "<unk>",
     "additional_args": {
       "name": "en"
@@ -161,6 +173,8 @@
     "length_column_name": "input_len",
     "fix_apostrophes": true,
     "remove_train_unks": false,
+    "do_lowercase": true,
+    "remove_punctuation": true,
     "unk_token": "<unk>",
     "additional_args": {
       "name": "en_us"
