@@ -187,9 +187,6 @@ class GeneralTrainingArgumentsContext(GeneralTrainingArguments):
 @dataclass
 class TokenizerTrainingArguments:
     _argument_group_name = "Tokenizer related arguments"
-    tokenizer_name: str = field(
-        metadata={"help": "The name of the model to be created (via the transformers library)."}
-    )
     tokenizer_type: Optional[str] = field(
         default="unigram", metadata={"help": "Type of tokenizer to create if does not exists."}
     )

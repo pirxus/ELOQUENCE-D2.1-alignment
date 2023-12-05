@@ -151,7 +151,7 @@ if __name__ == "__main__":
     # 4. Train tokenizer
     train_tokenizer(
         tokenizer_args.tokenizer_type,
-        tokenizer_args.tokenizer_name,
+        training_args.tokenizer_name,
         text,
         tokenizer_args.vocab_size,
         tokenizer_args.bos_token,
