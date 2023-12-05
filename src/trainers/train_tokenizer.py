@@ -15,7 +15,11 @@ from transformers import HfArgumentParser, PreTrainedTokenizerFast
 from transformers.utils import logging
 
 from utilities.data_utils import get_dataset
-from utilities.training_arguments import TokenizerTrainingArguments
+from utilities.training_arguments import (
+    DataTrainingArguments,
+    GeneralTrainingArguments,
+    TokenizerTrainingArguments,
+)
 
 
 def train_tokenizer(
@@ -93,7 +97,7 @@ def train_tokenizer(
 if __name__ == "__main__":
     logging.set_verbosity_debug()
     logger = logging.get_logger("transformers")
-    parser = HfArgumentParser((TokenizerTrainingArguments,))
+    parser = HfArgumentParser((TokenizerTrainingArguments, DataTrainingArguments, GeneralTrainingArguments))
 
     tokenizer_args, data_args, training_args = parser.parse_args_into_dataclasses()
 
