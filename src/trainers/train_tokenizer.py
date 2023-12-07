@@ -153,10 +153,10 @@ if __name__ == "__main__":
         tokenizer_args.tokenizer_type,
         training_args.tokenizer_name,
         text,
-        tokenizer_args.vocab_size,
         tokenizer_args.bos_token,
         tokenizer_args.eos_token,
         data_args.unk_token,
         tokenizer_args.pad_token,
         tokenizer_args.mask_token,
+        tokenizer_args.vocab_size,
     )
