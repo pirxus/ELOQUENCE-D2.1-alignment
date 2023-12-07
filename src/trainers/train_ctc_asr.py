@@ -46,7 +46,7 @@ if __name__ == "__main__":
         remove_punctuation=data_args.remove_punctuation,
     )
     training_eval_dataset = (
-        dataset[data_args.validation_split].select(range(data_args.validation_slice))
+        dataset[data_args.validation_split].shuffle().select(range(data_args.validation_slice))
         if data_args.validation_slice
         else dataset[data_args.validation_split]
     )
