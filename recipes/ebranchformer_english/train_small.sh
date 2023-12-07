@@ -59,14 +59,14 @@ args=(
 
   # Data related arguments
   --max_duration_in_seconds="20.0"
-  --min_duration_in_seconds="0.0"
+  --min_duration_in_seconds="0.1"
   --length_column_name="input_len"
   --remove_unused_columns="False"
   --preprocessing_num_workers="64"
-    --datasets_creation_config="${RECIPE_DIR}/datasets.json"
+  --datasets_creation_config="${RECIPE_DIR}/datasets.json"
   --writer_batch_size="1000"
-    --test_splits wsj_test fisher_swbd_test voxpopuli_test tedlium3_test librispeech_test.clean librispeech_test.other commonvoice_en_test fleurs_test
-    --validation_slice=10000
+  --test_splits wsj_test fisher_swbd_test voxpopuli_test tedlium3_test librispeech_test.clean librispeech_test.other commonvoice_en_test fleurs_test
+  --validation_slice=10000
 
   # Preprocessing related arguments
   --data_preprocessing_config="${RECIPE_DIR}/data_preprocessing.json"
