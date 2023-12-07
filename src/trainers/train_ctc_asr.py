@@ -64,7 +64,7 @@ if __name__ == "__main__":
     model = instantiate_ctc_model(model_args, tokenizer, feature_extractor)
 
     # 4. Initialize callbacks
-    callbacks = init_callbacks(data_args, training_args, dataset[data_args.train_split], feature_extractor)
+    callbacks = init_callbacks(data_args, training_args, dataset, feature_extractor)
 
     # 5. Initialize data collator
     data_collator = SpeechCollatorWithPadding(

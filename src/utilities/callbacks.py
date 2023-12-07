@@ -5,7 +5,7 @@ from typing import Dict, List, Tuple, Union
 
 import numpy as np
 import torch
-from datasets import Dataset
+from datasets import DatasetDict
 from transformers import (
     EarlyStoppingCallback,
     SequenceFeatureExtractor,
@@ -45,32 +45,33 @@ class DelayedStartWrapper:
 class DataPreprocessingManagerCallback(TrainerCallback):
     def __init__(
         self,
-        preprocessing_config: List[Dict],
-        dataset: Dataset,
+        preprocessing_config: Dict[str, List[Dict]],
+        dataset: DatasetDict,
         audio_column_name: str,
         feature_extractor: SequenceFeatureExtractor,
     ):
         super().__init__()
-        self.train_dataset = dataset
+        self.dataset = dataset
         self.audio_column_name = audio_column_name
-        self.transforms = []
-        for config in preprocessing_config:
-            if config["name"] == "feature_extractor":
-                fun = feature_extractor
-            else:
-                module, attribute = config["name"].rsplit(".", 1)
-                fun = resolve_attribute_from_nested_class(importlib.import_module(module), attribute)(
-                    **config["params"]
-                )
+        self.transforms = {split: [] for split in preprocessing_config.keys()}
+        for split, config_list in preprocessing_config.items():
+            for config in config_list:
+                if config["name"] == "feature_extractor":
+                    fun = feature_extractor
+                else:
+                    module, attribute = config["name"].rsplit(".", 1)
+                    fun = resolve_attribute_from_nested_class(importlib.import_module(module), attribute)(
+                        **config["params"]
+                    )
 
-            self.transforms.append(
-                (
-                    DelayedStartWrapper(
-                        FunctionReturnWrapper(fun, config["return_behaviour"]), config["steps_before_activation"]
-                    ),
-                    config["fn_call_params"],
+                self.transforms[split].append(
+                    (
+                        DelayedStartWrapper(
+                            FunctionReturnWrapper(fun, config["return_behaviour"]), config["steps_before_activation"]
+                        ),
+                        config["fn_call_params"],
+                    )
                 )
-            )
 
     @staticmethod
     def transformer(audio: Union[np.ndarray, torch.Tensor], transforms: List[Tuple[DelayedStartWrapper, Dict]]):
@@ -81,24 +82,26 @@ class DataPreprocessingManagerCallback(TrainerCallback):
         return audio
 
     def on_init_end(self, args: TrainingArguments, state: TrainerState, control: TrainerControl, **kwargs):
-        self.train_dataset.set_transform(
-            lambda batch: {
-                self.audio_column_name: [
-                    self.transformer(audio_object_stripper(audio), self.transforms)
-                    for audio in batch[self.audio_column_name]
-                ]
-            },
-            columns=[self.audio_column_name],
-            output_all_columns=True,
-        )
-
-    def on_train_begin(self, args: TrainingArguments, state: TrainerState, control: TrainerControl, **kwargs):
-        for transform in self.transforms:
-            transform[0].new_step(state.global_step)
+        for split in self.dataset.keys():
+            transform_key = "default_preprocessing" if split not in self.transforms else split
+            self.dataset[split].set_transform(
+                lambda batch: {
+                    self.audio_column_name: [
+                        self.transformer(audio_object_stripper(audio), self.transforms[transform_key])
+                        for audio in batch[self.audio_column_name]
+                    ]
+                },
+                columns=[self.audio_column_name],
+                output_all_columns=True,
+            )
+        for split_transforms in self.transforms.values():
+            for transform in split_transforms:
+                transform[0].new_step(state.global_step)
 
     def on_step_begin(self, args: TrainingArguments, state: TrainerState, control: TrainerControl, **kwargs):
-        for transform in self.transforms:
-            transform[0].new_step(state.global_step)
+        for split_transforms in self.transforms.values():
+            for transform in split_transforms:
+                transform[0].new_step(state.global_step)
 
 
 class AdditionalLossPrinterCallback(TrainerCallback):
@@ -122,7 +125,7 @@ class AdditionalLossPrinterCallback(TrainerCallback):
 def init_callbacks(
     data_args: DataTrainingArguments,
     training_args: GeneralTrainingArguments,
-    dataset: Dataset,
+    dataset: DatasetDict,
     feature_extractor: SequenceFeatureExtractor,
 ):
     callbacks = []
@@ -137,20 +140,21 @@ def init_callbacks(
                 )
             )
     else:
+        default_preprocessing = [
+            {
+                "name": "feature_extractor",
+                "steps_before_activation": 0,
+                "fn_call_params": {
+                    "return_attention_mask": False,
+                    "sampling_rate": 16000,
+                    "return_tensors": "pt",
+                },
+                "return_behaviour": ["input_features[0]"],
+            }
+        ]
         callbacks.append(
             DataPreprocessingManagerCallback(
-                preprocessing_config=[
-                    {
-                        "name": "feature_extractor",
-                        "steps_before_activation": 0,
-                        "fn_call_params": {
-                            "return_attention_mask": False,
-                            "sampling_rate": 16000,
-                            "return_tensors": "pt",
-                        },
-                        "return_behaviour": ["input_features[0]"],
-                    }
-                ],
+                preprocessing_config={"default_preprocessing": default_preprocessing},
                 dataset=dataset,
                 audio_column_name=data_args.audio_column_name,
                 feature_extractor=feature_extractor,

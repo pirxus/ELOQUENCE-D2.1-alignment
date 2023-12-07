@@ -81,7 +81,6 @@ if __name__ == "__main__":
         early_stopping=gen_args.early_stopping,
         eos_token_id=tokenizer.eos_token_id,
         max_length=gen_args.max_length,
-        # output_hidden_states=base_model_config["output_hidden_states"],
         num_beams=gen_args.num_beams,
     )
     logger.info(f"Model updating generation config:\n {str(gen_config)}")
@@ -94,7 +93,7 @@ if __name__ == "__main__":
         )
 
     # 5. Initialize callbacks
-    callbacks = init_callbacks(data_args, training_args, dataset[data_args.train_split], feature_extractor)
+    callbacks = init_callbacks(data_args, training_args, dataset, feature_extractor)
 
     # 6. Initialize data collator
     data_collator = SpeechCollatorWithPadding(
