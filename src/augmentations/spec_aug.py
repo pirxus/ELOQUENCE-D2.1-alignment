@@ -194,7 +194,7 @@ class MaskAlongAxis(torch.nn.Module):
                 f"mask_width_range must be a tuple of int and int values: " f"{mask_width_range}",
             )
 
-        if mask_width_range[1] > mask_width_range[0]:
+        if mask_width_range[1] < mask_width_range[0]:
             raise ValueError("mask_width_range must be (min_width, max_width)")
         if isinstance(dim, str):
             if dim == "time":
@@ -257,7 +257,7 @@ class MaskAlongAxisVariableMaxWidth(torch.nn.Module):
                 f"mask_width_ratio_range must be a tuple of float and float values: " f"{mask_width_ratio_range}",
             )
 
-        if mask_width_ratio_range[1] > mask_width_ratio_range[0]:
+        if mask_width_ratio_range[1] < mask_width_ratio_range[0]:
             raise ValueError("mask_width_ratio_range must be (min_ratio, max_ratio)")
         if isinstance(dim, str):
             if dim == "time":
