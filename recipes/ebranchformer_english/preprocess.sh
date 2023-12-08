@@ -4,13 +4,13 @@
 #SBATCH --partition qcpu
 #SBATCH --nodes 1
 #SBATCH --time 24:00:00
-#SBATCH --output=/mnt/proj1/open-28-58/lakoc/huggingface_asr/outputs/ebranchformer_joined_english_preprocess.out
+#SBATCH --output=/mnt/proj1/open-28-58/lakoc/huggingface_asr/outputs/ebranchformer_english_preprocess.out
 
-EXPERIMENT="ebranchformer_joined_english_preprocess"
+EXPERIMENT="ebranchformer_english_preprocess"
 PROJECT="regularizations_english_corpus"
 WORK_DIR="/mnt/proj1/open-28-58/lakoc/huggingface_asr"
 ENV_DIR="/mnt/proj1/open-28-58/lakoc/LoCo-ASR"
-RECIPE_DIR="${WORK_DIR}/recipes/ebranchformer_joined_english"
+RECIPE_DIR="${WORK_DIR}/recipes/ebranchformer_english"
 
 export HF_HOME="${ENV_DIR}/huggingface_cache"
 export PYTHONPATH="${PYTHONPATH}:${WORK_DIR}/src"
