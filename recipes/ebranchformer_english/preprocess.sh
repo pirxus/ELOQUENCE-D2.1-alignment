@@ -38,4 +38,4 @@ args=(
 
 )
 
-python src/trainers/train_enc_dec_asr.py
+python src/trainers/train_enc_dec_asr.py "${args[@]}"
