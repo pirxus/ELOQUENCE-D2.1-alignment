@@ -1,6 +1,7 @@
 import importlib
 import json
 from dataclasses import field, make_dataclass
+from functools import partial
 from typing import Dict, List, Tuple, Union
 
 import numpy as np
@@ -44,11 +45,11 @@ class DelayedStartWrapper:
 
 class DataPreprocessingManagerCallback(TrainerCallback):
     def __init__(
-        self,
-        preprocessing_config: Dict[str, List[Dict]],
-        dataset: DatasetDict,
-        audio_column_name: str,
-        feature_extractor: SequenceFeatureExtractor,
+            self,
+            preprocessing_config: Dict[str, List[Dict]],
+            dataset: DatasetDict,
+            audio_column_name: str,
+            feature_extractor: SequenceFeatureExtractor,
     ):
         super().__init__()
         self.dataset = dataset
@@ -81,16 +82,19 @@ class DataPreprocessingManagerCallback(TrainerCallback):
             audio = augmentation(audio, **fn_call_params)
         return audio
 
+    def default_transform(self, batch, transform_key):
+        return {
+            self.audio_column_name: [
+                self.transformer(audio_object_stripper(audio), self.transforms[transform_key])
+                for audio in batch[self.audio_column_name]
+            ]
+        }
+
     def on_init_end(self, args: TrainingArguments, state: TrainerState, control: TrainerControl, **kwargs):
         for split in self.dataset.keys():
             transform_key = "default_preprocessing" if split not in self.transforms else split
             self.dataset[split].set_transform(
-                lambda batch: {
-                    self.audio_column_name: [
-                        self.transformer(audio_object_stripper(audio), self.transforms[transform_key])
-                        for audio in batch[self.audio_column_name]
-                    ]
-                },
+                partial(self.default_transform, transform_key=transform_key),
                 columns=[self.audio_column_name],
                 output_all_columns=True,
             )
@@ -123,10 +127,10 @@ class AdditionalLossPrinterCallback(TrainerCallback):
 
 
 def init_callbacks(
-    data_args: DataTrainingArguments,
-    training_args: GeneralTrainingArguments,
-    dataset: DatasetDict,
-    feature_extractor: SequenceFeatureExtractor,
+        data_args: DataTrainingArguments,
+        training_args: GeneralTrainingArguments,
+        dataset: DatasetDict,
+        feature_extractor: SequenceFeatureExtractor,
 ):
     callbacks = []
     if data_args.data_preprocessing_config:
