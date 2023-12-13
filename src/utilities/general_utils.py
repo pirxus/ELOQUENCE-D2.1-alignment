@@ -42,7 +42,7 @@ class FunctionReturnWrapper:
             return self._process_return_config(self.return_config, result)
 
     @staticmethod
-    def _process_return_config(return_config: Dict, result: Union[Dict, torch.Tensor]) -> tuple[Any, ...] | Any:
+    def _process_return_config(return_config: Dict, result: Union[Dict, torch.Tensor]) -> Union[tuple[Any, ...], Any]:
         if isinstance(return_config, list):
             if all(isinstance(i, (int, str)) for i in return_config):
                 output = tuple(  # nosec
