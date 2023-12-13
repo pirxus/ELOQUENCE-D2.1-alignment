@@ -41,6 +41,13 @@ def extract_lens_batched(audios: List[List[float]], len_column: str, sampling_ra
     return batch
 
 
+def filter_out_empty_audios_batched(
+    batch: List[List[float]],
+) -> List[bool]:
+    """Filter empty (all 0) audio segments."""
+    return list(map(lambda x: np.any(x), batch))
+
+
 def filter_wrongly_annotated_segments_batched(batch: List[str]) -> List[bool]:
     """Filters out segments which are wrongly annotated."""
     return list(map(lambda x: x != "ignore_time_segment_in_scoring", batch))
@@ -228,6 +235,15 @@ def prepare_dataset(
         num_proc=preprocessing_num_workers,
         writer_batch_size=writer_batch_size,
         fn_kwargs={"label_column": text_column_name},
+    )
+
+    logger.info("Filtering empty audio files.")
+    dataset = dataset.filter(
+        filter_out_empty_audios_batched,
+        input_columns=[audio_column_name],
+        batched=True,
+        writer_batch_size=writer_batch_size,
+        num_proc=preprocessing_num_workers,
     )
 
     logger.info("Casting audio column to Audio.")
