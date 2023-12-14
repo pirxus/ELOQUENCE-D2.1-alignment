@@ -41,11 +41,12 @@ def extract_lens_batched(audios: List[List[float]], len_column: str, sampling_ra
     return batch
 
 
-def filter_out_empty_audios_batched(
-    batch: List[List[float]],
-) -> List[bool]:
+def filter_out_empty_audios(
+    x: List[float],
+) -> bool:
     """Filter empty (all 0) audio segments."""
-    return list(map(lambda x: np.any(x), batch))
+    x = audio_object_stripper(x)
+    return np.any(x)
 
 
 def filter_wrongly_annotated_segments_batched(batch: List[str]) -> List[bool]:
@@ -239,9 +240,8 @@ def prepare_dataset(
 
     logger.info("Filtering empty audio files.")
     dataset = dataset.filter(
-        filter_out_empty_audios_batched,
+        filter_out_empty_audios,
         input_columns=[audio_column_name],
-        batched=True,
         writer_batch_size=writer_batch_size,
         num_proc=preprocessing_num_workers,
     )
