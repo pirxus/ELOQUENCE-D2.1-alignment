@@ -17,6 +17,8 @@ export HF_HOME="/scratch/project/open-28-57/lakoc/huggingface_cache"
 export HF_DATASETS_IN_MEMORY_MAX_SIZE=100000000000
 export PYTHONPATH="${PYTHONPATH}:${WORK_DIR}/src"
 export OMP_NUM_THREADS=64
+export WANDB_PROJECT=$PROJECT
+export WANDB_RUN_ID="${EXPERIMENT}"
 
 conda deactivate
 source activate loco_asr
@@ -54,7 +56,7 @@ args=(
   --logging_steps="10"
   --save_strategy="epoch"
   --evaluation_strategy="epoch"
-  --wandb_predictions_to_save=600
+  --wandb_predictions_to_save=50
   --greater_is_better="False"
   --save_total_limit="5"
   --track_ctc_loss
