@@ -5,6 +5,7 @@ import string
 from typing import Dict, List, Union
 
 import numpy as np
+import torch.distributed
 from datasets import (
     Audio,
     Dataset,
@@ -127,6 +128,12 @@ def prepare_dataset(
     min_input_len: float,
 ) -> DatasetDict:
     """Preprocesses dataset."""
+    local_rank = None
+    if torch.distributed.is_initialized():
+        local_rank = torch.distributed.get_rank()
+        if local_rank > 0:
+            logger.info("Waiting for main process to perform the mapping")
+            torch.distributed.barrier()
     if length_column_name not in set().union(*dataset.column_names.values()) or "kaldi_dataset" in dataset_name:
         logger.info(f"Extracting audio lens.")
         dataset = dataset.map(
@@ -233,6 +240,12 @@ def prepare_dataset(
     logger.info("Casting audio column to Audio.")
     dataset = dataset.cast_column(audio_column_name, Audio(sampling_rate=sampling_rate))
     dataset = dataset.cast_column(length_column_name, Value(dtype="float32"))
+
+    if torch.distributed.is_initialized():
+        if local_rank == 0:
+            logger.info("Finished preprocessing dataset. Loading results from different processes.")
+            torch.distributed.barrier()
+
     logger.info(str(dataset))
     return dataset
 
@@ -294,14 +307,11 @@ def load_multiple_datasets(
     for dataset_config in config_dict:
         logger.info(f"Loading dataset {dataset_config['dataset_name']}")
         if dataset_config["load_from_disk"]:
-            dataset = load_from_disk(
-                dataset_config["dataset_name"], keep_in_memory=False, **dataset_config["additional_args"]
-            )
+            dataset = load_from_disk(dataset_config["dataset_name"], **dataset_config["additional_args"])
 
         else:
             dataset = load_dataset(
                 dataset_config["dataset_name"],
-                keep_in_memory=False,
                 num_proc=num_proc,
                 **dataset_config["additional_args"],
             )
@@ -391,11 +401,9 @@ def get_dataset(
         )
     else:
         if dataset_config is not None:
-            dataset = load_dataset(
-                dataset_name, dataset_config, keep_in_memory=False, num_proc=preprocessing_num_workers
-            )
+            dataset = load_dataset(dataset_name, dataset_config, num_proc=preprocessing_num_workers)
         else:
-            dataset = load_from_disk(dataset_name, keep_in_memory=False)
+            dataset = load_from_disk(dataset_name)
 
         # 3. Preprocess dataset
         dataset = prepare_dataset(
