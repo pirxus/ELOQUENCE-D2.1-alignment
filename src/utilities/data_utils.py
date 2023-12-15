@@ -41,14 +41,6 @@ def extract_lens_batched(audios: List[List[float]], len_column: str, sampling_ra
     return batch
 
 
-def filter_out_empty_audios(
-    x: List[float],
-) -> bool:
-    """Filter empty (all 0) audio segments."""
-    x = audio_object_stripper(x)
-    return np.any(x)
-
-
 def filter_wrongly_annotated_segments_batched(batch: List[str]) -> List[bool]:
     """Filters out segments which are wrongly annotated."""
     return list(map(lambda x: x != "ignore_time_segment_in_scoring", batch))
@@ -135,7 +127,7 @@ def prepare_dataset(
     min_input_len: float,
 ) -> DatasetDict:
     """Preprocesses dataset."""
-    if length_column_name not in set().union(*dataset.column_names.values()):
+    if length_column_name not in set().union(*dataset.column_names.values()) or "kaldi_dataset" in dataset_name:
         logger.info(f"Extracting audio lens.")
         dataset = dataset.map(
             extract_lens_batched,
@@ -236,14 +228,6 @@ def prepare_dataset(
         num_proc=preprocessing_num_workers,
         writer_batch_size=writer_batch_size,
         fn_kwargs={"label_column": text_column_name},
-    )
-
-    logger.info("Filtering empty audio files.")
-    dataset = dataset.filter(
-        filter_out_empty_audios,
-        input_columns=[audio_column_name],
-        writer_batch_size=writer_batch_size,
-        num_proc=preprocessing_num_workers,
     )
 
     logger.info("Casting audio column to Audio.")
