@@ -5,7 +5,6 @@ import string
 from typing import Dict, List, Union
 
 import numpy as np
-import torch.distributed
 from datasets import (
     Audio,
     Dataset,
@@ -128,12 +127,6 @@ def prepare_dataset(
     min_input_len: float,
 ) -> DatasetDict:
     """Preprocesses dataset."""
-    local_rank = None
-    if torch.distributed.is_initialized():
-        local_rank = torch.distributed.get_rank()
-        if local_rank > 0:
-            logger.info("Waiting for main process to perform the mapping")
-            torch.distributed.barrier()
     if length_column_name not in set().union(*dataset.column_names.values()) or "kaldi_dataset" in dataset_name:
         logger.info(f"Extracting audio lens.")
         dataset = dataset.map(
@@ -240,12 +233,6 @@ def prepare_dataset(
     logger.info("Casting audio column to Audio.")
     dataset = dataset.cast_column(audio_column_name, Audio(sampling_rate=sampling_rate))
     dataset = dataset.cast_column(length_column_name, Value(dtype="float32"))
-
-    if torch.distributed.is_initialized():
-        if local_rank == 0:
-            logger.info("Finished preprocessing dataset. Loading results from different processes.")
-            torch.distributed.barrier()
-
     logger.info(str(dataset))
     return dataset
 
