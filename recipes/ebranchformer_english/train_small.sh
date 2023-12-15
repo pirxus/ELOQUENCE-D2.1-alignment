@@ -5,15 +5,16 @@
 #SBATCH --gpus 8
 #SBATCH --nodes 1
 #SBATCH --time 2-00:00:00
-#SBATCH --output=/mnt/proj1/open-28-58/lakoc/huggingface_asr/outputs/ebranchformer_english_small.out
+#SBATCH --output=/mnt/proj1/open-28-58/lakoc/huggingface_asr/outputs/ebranchformer_english_small_v2.out
 
-EXPERIMENT="ebranchformer_english_small"
+EXPERIMENT="ebranchformer_english_small_v2"
 PROJECT="regularizations_english_corpus"
 WORK_DIR="/mnt/proj1/open-28-58/lakoc/huggingface_asr"
 ENV_DIR="/mnt/proj1/open-28-58/lakoc/LoCo-ASR"
 RECIPE_DIR="${WORK_DIR}/recipes/ebranchformer_english"
 
-export HF_HOME="${ENV_DIR}/huggingface_cache"
+export HF_HOME="/scratch/project/open-28-57/lakoc/huggingface_cache"
+export HF_DATASETS_IN_MEMORY_MAX_SIZE=100000000000
 export PYTHONPATH="${PYTHONPATH}:${WORK_DIR}/src"
 export OMP_NUM_THREADS=64
 
@@ -29,7 +30,7 @@ args=(
   --output_dir=$EXPERIMENT_PATH
   --per_device_train_batch_size="64"
   --per_device_eval_batch_size="64"
-  --dataloader_num_workers="32"
+  --dataloader_num_workers="24"
   --num_train_epochs="50"
   --group_by_length="True"
   --bf16
@@ -56,10 +57,11 @@ args=(
   --wandb_predictions_to_save=600
   --greater_is_better="False"
   --save_total_limit="5"
+  --track_ctc_loss
 
   # Data related arguments
   --max_duration_in_seconds="20.0"
-  --min_duration_in_seconds="0.1"
+  --min_duration_in_seconds="0.2"
   --length_column_name="input_len"
   --remove_unused_columns="False"
   --preprocessing_num_workers="64"
