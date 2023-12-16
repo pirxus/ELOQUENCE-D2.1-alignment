@@ -126,6 +126,8 @@ if __name__ == "__main__":
         remove_train_unks=data_args.remove_train_unks,
         do_lower_case=data_args.do_lower_case,
         remove_punctuation=data_args.remove_punctuation,
+        data_dir=data_args.data_dir,
+        skip_audio_processing=data_args.skip_audio_processing,
     )
 
     training_eval_dataset = (

@@ -2,7 +2,7 @@
 import json
 import re
 import string
-from typing import Dict, List, Union
+from typing import Dict, List, Union, Optional
 
 import numpy as np
 from datasets import (
@@ -103,6 +103,11 @@ def remove_punctuation_batched(batch: List[str], label_column: str) -> Dict[str,
     return {label_column: [example.translate(str.maketrans("", "", string.punctuation)) for example in batch]}
 
 
+def remove_commas_stops_batched(batch: List[str], label_column: str) -> Dict[str, List[str]]:
+    """Removes commas and full stops from batch."""
+    return {label_column: [example.translate(str.maketrans("", "", ",.")) for example in batch]}
+
+
 def remove_multiple_whitespaces_and_strip_batched(batch: List[str], label_column: str) -> Dict[str, List[str]]:
     """Removes multiple whitespaces from batch."""
     return {label_column: [re.sub(r"\s+", " ", example).strip() for example in batch]}
@@ -125,29 +130,32 @@ def prepare_dataset(
     sampling_rate: int,
     max_input_len: float,
     min_input_len: float,
+    remove_commas_stops: bool = False,
+    skip_audio_processing: bool = False,
 ) -> DatasetDict:
     """Preprocesses dataset."""
-    if length_column_name not in set().union(*dataset.column_names.values()) or "kaldi_dataset" in dataset_name:
-        logger.info(f"Extracting audio lens.")
-        dataset = dataset.map(
-            extract_lens_batched,
-            num_proc=preprocessing_num_workers,
-            input_columns=[audio_column_name],
-            batched=True,
-            writer_batch_size=writer_batch_size,
-            fn_kwargs={"sampling_rate": sampling_rate, "len_column": length_column_name},
-        )
+    if not skip_audio_processing:
+        if length_column_name not in set().union(*dataset.column_names.values()) or "kaldi_dataset" in dataset_name:
+            logger.info(f"Extracting audio lens.")
+            dataset = dataset.map(
+                extract_lens_batched,
+                num_proc=preprocessing_num_workers,
+                input_columns=[audio_column_name],
+                batched=True,
+                writer_batch_size=writer_batch_size,
+                fn_kwargs={"sampling_rate": sampling_rate, "len_column": length_column_name},
+            )
 
-    if train_split is not None:
-        logger.info(f"Filtering out too long and too short sequences from dataset.")
-        dataset[train_split] = dataset[train_split].filter(
-            filter_sequences_in_range_batched,
-            batched=True,
-            input_columns=[length_column_name],
-            num_proc=preprocessing_num_workers,
-            writer_batch_size=writer_batch_size,
-            fn_kwargs={"max_input_len": max_input_len, "min_input_len": min_input_len},
-        )
+        if train_split is not None:
+            logger.info(f"Filtering out too long and too short sequences from dataset.")
+            dataset[train_split] = dataset[train_split].filter(
+                filter_sequences_in_range_batched,
+                batched=True,
+                input_columns=[length_column_name],
+                num_proc=preprocessing_num_workers,
+                writer_batch_size=writer_batch_size,
+                fn_kwargs={"max_input_len": max_input_len, "min_input_len": min_input_len},
+            )
 
     if do_lower_case:
         logger.info(f"Lower casing dataset.")
@@ -164,6 +172,17 @@ def prepare_dataset(
         logger.info(f"Removing punctuation from dataset.")
         dataset = dataset.map(
             remove_punctuation_batched,
+            input_columns=[text_column_name],
+            batched=True,
+            num_proc=preprocessing_num_workers,
+            writer_batch_size=writer_batch_size,
+            fn_kwargs={"label_column": text_column_name},
+        )
+
+    if remove_commas_stops:
+        logger.info(f"Removing commas and full stops from dataset.")
+        dataset = dataset.map(
+            remove_commas_stops_batched,
             input_columns=[text_column_name],
             batched=True,
             num_proc=preprocessing_num_workers,
@@ -230,9 +249,10 @@ def prepare_dataset(
         fn_kwargs={"label_column": text_column_name},
     )
 
-    logger.info("Casting audio column to Audio.")
-    dataset = dataset.cast_column(audio_column_name, Audio(sampling_rate=sampling_rate))
-    dataset = dataset.cast_column(length_column_name, Value(dtype="float32"))
+    if not skip_audio_processing:
+        logger.info("Casting audio column to Audio.")
+        dataset = dataset.cast_column(audio_column_name, Audio(sampling_rate=sampling_rate))
+        dataset = dataset.cast_column(length_column_name, Value(dtype="float32"))
     logger.info(str(dataset))
     return dataset
 
@@ -373,6 +393,9 @@ def get_dataset(
     remove_train_unks: bool,
     do_lower_case: bool,
     remove_punctuation: bool,
+    remove_commas_stops: bool = False,
+    skip_audio_processing: bool = False,
+    data_dir: Optional[str] = None,
 ) -> DatasetDict:
     """Loads single or multiple datasets, preprocess, and merge them."""
     if datasets_creation_config_path is not None:
@@ -392,7 +415,15 @@ def get_dataset(
     else:
         if dataset_config is not None:
             dataset = load_dataset(
-                dataset_name, dataset_config, keep_in_memory=False, num_proc=preprocessing_num_workers
+                dataset_name, dataset_config, data_dir=data_dir, keep_in_memory=False, num_proc=preprocessing_num_workers
+            )
+        elif data_dir is not None:
+
+            # loads the dataset located at data_dir with the specific dataset_name builder in mind
+            dataset = load_dataset(
+                dataset_name,
+                data_dir=data_dir,
+                keep_in_memory=False, num_proc=preprocessing_num_workers
             )
         else:
             dataset = load_from_disk(dataset_name, keep_in_memory=False)
@@ -415,5 +446,7 @@ def get_dataset(
             min_input_len=min_input_len,
             do_lower_case=do_lower_case,
             remove_punctuation=remove_punctuation,
+            remove_commas_stops=remove_commas_stops,
+            skip_audio_processing=skip_audio_processing,
         )
     return dataset

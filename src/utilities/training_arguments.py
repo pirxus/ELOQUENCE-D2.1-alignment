@@ -111,6 +111,9 @@ class DataTrainingArguments:
     dataset_config: Optional[str] = field(
         default=None, metadata={"help": "The config of the dataset to use (via the datasets library)."}
     )
+    data_dir: Optional[str] = field(
+        default=None, metadata={"help": "The path to the data directory, used with specific dataset builders."}
+    )
     datasets_creation_config: Optional[str] = field(
         default=None, metadata={"help": "Path to dictionary containing setups for multiple datasets."}
     )
@@ -133,6 +136,9 @@ class DataTrainingArguments:
     preprocessing_num_workers: Optional[int] = field(
         default=1, metadata={"help": "Number of processes to use for data preprocessing."}
     )
+    skip_audio_processing: Optional[bool] = field(
+        default=False, metadata={"help": "Whether to skip the audio pre-preocessing stage when preparing the dataset."}
+    )
     writer_batch_size: Optional[int] = field(default=500, metadata={"help": "Batch size to use for writing to disk."})
     remove_train_unks: Optional[bool] = field(
         default=False, metadata={"help": "Whether to remove UNKs from training data."}
@@ -143,6 +149,9 @@ class DataTrainingArguments:
     do_lower_case: Optional[bool] = field(default=False, metadata={"help": "Whether to lowercase labels."})
     remove_punctuation: Optional[bool] = field(
         default=False, metadata={"help": "Whether to remove punctuation from labels."}
+    )
+    remove_commas_stops: Optional[bool] = field(
+        default=False, metadata={"help": "Whether to remove commas and full-stops from labels."}
     )
     unk_token: Optional[str] = field(default="<unk>", metadata={"help": "UNK token"})
 
