@@ -150,6 +150,9 @@ class DataTrainingArguments:
     remove_punctuation: Optional[bool] = field(
         default=False, metadata={"help": "Whether to remove punctuation from labels."}
     )
+    remove_listed_chars: Optional[str] = field(
+        default=None, metadata={"help": "Removes characters specified by the string from labels."}
+    )
     remove_commas_stops: Optional[bool] = field(
         default=False, metadata={"help": "Whether to remove commas and full-stops from labels."}
     )

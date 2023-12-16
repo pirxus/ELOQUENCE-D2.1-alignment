@@ -128,6 +128,7 @@ if __name__ == "__main__":
         remove_punctuation=data_args.remove_punctuation,
         data_dir=data_args.data_dir,
         skip_audio_processing=data_args.skip_audio_processing,
+        remove_listed_chars=data_args.remove_listed_chars,
     )
 
     training_eval_dataset = (

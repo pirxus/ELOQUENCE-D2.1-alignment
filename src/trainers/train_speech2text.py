@@ -58,6 +58,7 @@ if __name__ == "__main__":
         do_lower_case=data_args.do_lower_case,
         remove_punctuation=data_args.remove_punctuation,
         remove_commas_stops=data_args.remove_commas_stops,
+        remove_listed_chars=data_args.remove_listed_chars,
     )
     training_eval_dataset = (
         dataset[data_args.validation_split].shuffle().select(range(data_args.validation_slice))
