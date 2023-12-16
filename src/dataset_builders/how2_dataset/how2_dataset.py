@@ -8,22 +8,40 @@ import os
 class HOW2Dataset(datasets.GeneratorBasedBuilder):
     """Dataset builder for the raw audio version of the HOW2 dataset"""
 
+    BUILDER_CONFIGS = [
+        datasets.BuilderConfig(name="audio", description="The base config for the dataset. Can be used for ASR and ST."),
+        datasets.BuilderConfig(name="text_only", description="This config will produce a text-only dataset."),
+    ]
+
+    DEFAULT_CONFIG_NAME = "audio"
+
     def __init__(self, data_dir: Optional[str], **kwargs):
         super().__init__(data_dir=data_dir, **kwargs)
         self.data_dir = data_dir
         self.splits = ['dev5', 'train', 'val']
 
     def _info(self):
-        return datasets.DatasetInfo(
-            features=datasets.Features(
-                {
-                    "audio": datasets.Audio(sampling_rate=16_000),
-                    "transcription": datasets.Value("string"),
-                    "translation": datasets.Value("string"),
-                }
-            ),
-            supervised_keys=None,
-        )
+        if self.config.name == 'audio':
+            return datasets.DatasetInfo(
+                features=datasets.Features(
+                    {
+                        "audio": datasets.Audio(sampling_rate=16_000),
+                        "transcription": datasets.Value("string"),
+                        "translation": datasets.Value("string"),
+                    }
+                ),
+                supervised_keys=None,
+            )
+        else:
+            return datasets.DatasetInfo(
+                features=datasets.Features(
+                    {
+                        "transcription": datasets.Value("string"),
+                        "translation": datasets.Value("string"),
+                    }
+                ),
+                supervised_keys=None,
+            )
 
     def _split_generators(self, _):
         """Generate dataset splits"""
@@ -71,11 +89,17 @@ class HOW2Dataset(datasets.GeneratorBasedBuilder):
         for utt_id in recordings:
             utt_feats = features[utt_id]
 
-            # skip out the missing files, just in case..
-            if not os.path.isfile(utt_feats['file_path']): continue
-            yield utt_id, {
-                    'audio': datasets.features.Audio(sampling_rate=16_000
-                                                     ).encode_example(utt_feats['file_path']),
-                    'transcription': utt_feats['transcription'],
-                    'translation': utt_feats['translation']
-            }
+            if self.config.name == 'audio':
+                # skip out the missing files, just in case..
+                if not os.path.isfile(utt_feats['file_path']): continue
+                yield utt_id, {
+                        'audio': datasets.features.Audio(sampling_rate=16_000
+                                                         ).encode_example(utt_feats['file_path']),
+                        'transcription': utt_feats['transcription'],
+                        'translation': utt_feats['translation']
+                }
+            else:
+                yield utt_id, {
+                        'transcription': utt_feats['transcription'],
+                        'translation': utt_feats['translation']
+                }
