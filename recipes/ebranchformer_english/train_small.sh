@@ -2,19 +2,18 @@
 #SBATCH --job-name TED
 #SBATCH --account OPEN-28-57
 #SBATCH --partition qgpu
-#SBATCH --gpus 8
+#SBATCH --gpus 4
 #SBATCH --nodes 1
 #SBATCH --time 2-00:00:00
-#SBATCH --output=/mnt/proj1/open-28-58/lakoc/huggingface_asr/outputs/ebranchformer_english_small_v2.out
+#SBATCH --output=/mnt/proj1/open-28-58/lakoc/huggingface_asr/outputs/ebranchformer_english_small_v3.out
 
-EXPERIMENT="ebranchformer_english_small_v2"
+EXPERIMENT="ebranchformer_english_small_v3"
 PROJECT="regularizations_english_corpus"
 WORK_DIR="/mnt/proj1/open-28-58/lakoc/huggingface_asr"
 ENV_DIR="/mnt/proj1/open-28-58/lakoc/LoCo-ASR"
 RECIPE_DIR="${WORK_DIR}/recipes/ebranchformer_english"
 
 export HF_HOME="/scratch/project/open-28-57/lakoc/huggingface_cache"
-export HF_DATASETS_IN_MEMORY_MAX_SIZE=100000000000
 export PYTHONPATH="${PYTHONPATH}:${WORK_DIR}/src"
 export OMP_NUM_THREADS=64
 export WANDB_PROJECT=$PROJECT
@@ -93,4 +92,4 @@ args=(
   --eval_beam_factor="10"
 )
 
-torchrun --standalone --nnodes=1 --nproc-per-node=8 src/trainers/train_enc_dec_asr.py "${args[@]}"
+torchrun --standalone --nnodes=1 --nproc-per-node=4 src/trainers/train_enc_dec_asr.py "${args[@]}"
