@@ -60,11 +60,14 @@ if __name__ == "__main__":
         remove_commas_stops=data_args.remove_commas_stops,
         remove_listed_chars=data_args.remove_listed_chars,
     )
-    training_eval_dataset = (
-        dataset[data_args.validation_split].shuffle().select(range(data_args.validation_slice))
-        if data_args.validation_slice
-        else dataset[data_args.validation_split]
-    )
+
+    if data_args.validation_slice:
+        training_eval_dataset = dataset[data_args.validation_split].shuffle().select(range(data_args.validation_slice))
+        # Ensure that transformations are also attached to the sliced validation dataset
+        dataset[data_args.validation_split + str(data_args.validation_slice)] = training_eval_dataset
+    else:
+        training_eval_dataset = dataset[data_args.validation_split]
+
     logger.info(f"Dataset processed successfully.{dataset}")
 
     if training_args.preprocess_dataset_only:
@@ -80,7 +83,6 @@ if __name__ == "__main__":
         "encoder_layerdrop": 0.0,
         "pad_token_id": tokenizer.pad_token_id,
         "encoder_pad_token_id": tokenizer.pad_token_id,
-        "encoder_vocab_size": len(tokenizer),
         "decoder_vocab_size": len(tokenizer),
         "lsm_factor": model_args.lsm_factor,
         "shared_lm_head": model_args.shared_lm_head,
