@@ -146,7 +146,7 @@ class KaldiDataset(datasets.GeneratorBasedBuilder):
                     "uttid": uttid,
                     "recording": recording,
                     "turn_index": index,
-                    "input_len": end - start,
+                    "input_len": len(audio_cropped) / self.sampling_rate,
                 }
 
     @staticmethod
