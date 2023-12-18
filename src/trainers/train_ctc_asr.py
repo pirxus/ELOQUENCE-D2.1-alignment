@@ -45,11 +45,14 @@ if __name__ == "__main__":
         do_lower_case=data_args.do_lower_case,
         remove_punctuation=data_args.remove_punctuation,
     )
-    training_eval_dataset = (
-        dataset[data_args.validation_split].shuffle().select(range(data_args.validation_slice))
-        if data_args.validation_slice
-        else dataset[data_args.validation_split]
-    )
+
+    if data_args.validation_slice:
+        training_eval_dataset = dataset[data_args.validation_split].shuffle().select(range(data_args.validation_slice))
+        # Ensure that transformations are also attached to the sliced validation dataset
+        dataset[data_args.validation_split + str(data_args.validation_slice)] = training_eval_dataset
+    else:
+        training_eval_dataset = dataset[data_args.validation_split]
+
     logger.info(f"Dataset processed successfully.{dataset}")
 
     if training_args.preprocess_dataset_only:
