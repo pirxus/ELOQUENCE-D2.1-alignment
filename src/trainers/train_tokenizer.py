@@ -1,6 +1,6 @@
 import sys
 
-from datasets import load_dataset, load_from_disk
+from datasets import load_dataset
 from huggingface_hub import repo_exists
 from tokenizers import (
     Tokenizer,
@@ -14,7 +14,12 @@ from tokenizers.models import BPE, Unigram
 from transformers import HfArgumentParser, PreTrainedTokenizerFast
 from transformers.utils import logging
 
-from trainers.training_arguments import TokenizerTrainingArguments
+from utilities.data_utils import get_dataset
+from utilities.training_arguments import (
+    DataTrainingArguments,
+    GeneralTrainingArguments,
+    TokenizerTrainingArguments,
+)
 
 
 def train_tokenizer(
@@ -92,34 +97,66 @@ def train_tokenizer(
 if __name__ == "__main__":
     logging.set_verbosity_debug()
     logger = logging.get_logger("transformers")
-    parser = HfArgumentParser((TokenizerTrainingArguments,))
+    parser = HfArgumentParser((TokenizerTrainingArguments, DataTrainingArguments, GeneralTrainingArguments))
 
-    (tokenizer_args,) = parser.parse_args_into_dataclasses()
+    tokenizer_args, data_args, training_args = parser.parse_args_into_dataclasses()
 
+    # 0. Skip if exists
     if tokenizer_args.skip_if_exists is not None and repo_exists(tokenizer_args.skip_if_exists):
         logger.warning(f"Tokenizer {tokenizer_args.skip_if_exists} already exists. Skipping training.")
         sys.exit(0)
 
-    # 1. Load dataset
-    if tokenizer_args.dataset_config is not None:
-        dataset = load_dataset(tokenizer_args.dataset_name, tokenizer_args.dataset_config, keep_in_memory=False)
-    else:
-        dataset = load_from_disk(tokenizer_args.dataset_name, keep_in_memory=False)
+    # 1. Collect, preprocess dataset and extract evaluation dataset
+    dataset = get_dataset(
+        datasets_creation_config_path=data_args.datasets_creation_config,
+        dataset_name=data_args.dataset_name,
+        dataset_config=data_args.dataset_config,
+        preprocessing_num_workers=data_args.preprocessing_num_workers,
+        writer_batch_size=data_args.writer_batch_size,
+        sampling_rate=data_args.sampling_rate,
+        max_input_len=data_args.max_duration_in_seconds,
+        min_input_len=data_args.min_duration_in_seconds,
+        len_column=training_args.length_column_name,
+        text_column=data_args.text_column_name,
+        audio_column=data_args.audio_column_name,
+        train_split=data_args.train_split,
+        validation_split=data_args.validation_split,
+        unk_token=data_args.unk_token,
+        fix_apostrophes=data_args.fix_apostrophes,
+        remove_train_unks=data_args.remove_train_unks,
+        do_lower_case=data_args.do_lower_case,
+        remove_punctuation=data_args.remove_punctuation,
+    )
+
+    training_eval_dataset = (
+        dataset[data_args.validation_split].select(range(data_args.validation_slice))
+        if data_args.validation_slice
+        else dataset[data_args.validation_split]
+    )
+    logger.info(f"Dataset processed successfully.{dataset}")
+
+    if training_args.preprocess_dataset_only:
+        logger.info("Finished preprocessing dataset.")
+        sys.exit(0)
 
     # 2. Extract text
-    text = dataset[tokenizer_args.train_split][tokenizer_args.text_column_name]
+    text = dataset[data_args.train_split][data_args.text_column_name]
+
+    # 3. Add external text
     if tokenizer_args.additional_raw_data is not None:
         text += load_dataset("text", data_files=tokenizer_args.additional_raw_data, keep_linebreaks=True)["train"][
             "text"
         ]
+
+    # 4. Train tokenizer
     train_tokenizer(
         tokenizer_args.tokenizer_type,
-        tokenizer_args.tokenizer_name,
+        training_args.tokenizer_name,
         text,
-        tokenizer_args.vocab_size,
         tokenizer_args.bos_token,
         tokenizer_args.eos_token,
-        tokenizer_args.unk_token,
+        data_args.unk_token,
         tokenizer_args.pad_token,
         tokenizer_args.mask_token,
+        tokenizer_args.vocab_size,
     )

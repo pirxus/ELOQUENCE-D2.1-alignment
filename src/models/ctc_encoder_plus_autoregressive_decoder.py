@@ -1,3 +1,4 @@
+import inspect
 import warnings
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Tuple, Union
@@ -9,7 +10,6 @@ from torch.nn import CrossEntropyLoss
 from transformers import (
     AutoConfig,
     AutoModelForCausalLM,
-    AutoModelForCTC,
     PretrainedConfig,
     PreTrainedModel,
     SpeechEncoderDecoderConfig,
@@ -29,25 +29,18 @@ from transformers.generation.utils import (
     BeamSearchEncoderDecoderOutput,
     BeamSearchOutput,
 )
-from transformers.modeling_outputs import (
-    BaseModelOutput,
-    CausalLMOutput,
-    Seq2SeqLMOutput,
-)
+from transformers.modeling_outputs import CausalLMOutput, ModelOutput, Seq2SeqLMOutput
 from transformers.models.speech_encoder_decoder.modeling_speech_encoder_decoder import (
     shift_tokens_right,
 )
 from transformers.utils import logging
 
 from decoding.ctc_scorer import CTCPrefixScoreTH
-from models.decoders.multi_head_GPT2 import GPT2LMMultiHeadModel, GPT2MultiHeadConfig
-from models.decoders.residual_clasiffier_GPT2 import (
+from models.auto_wrappers import CustomAutoModelForCTC
+from models.decoders.multi_head_gpt2 import GPT2LMMultiHeadModel, GPT2MultiHeadConfig
+from models.decoders.residual_clasiffier_gpt2 import (
     GPT2ResidualsLMHeadConfig,
     GPT2ResidualsLMHeadModel,
-)
-from models.encoders.branchformer import (
-    Wav2Vec2BranchformerConfig,
-    Wav2Vec2BranchformerForCTC,
 )
 from models.encoders.e_branchformer import (
     Wav2Vec2EBranchformerConfig,
@@ -62,11 +55,8 @@ AutoModelForCausalLM.register(GPT2MultiHeadConfig, GPT2LMMultiHeadModel)
 AutoConfig.register("gpt2-residuals-head", GPT2ResidualsLMHeadConfig)
 AutoModelForCausalLM.register(GPT2ResidualsLMHeadConfig, GPT2ResidualsLMHeadModel)
 
-AutoConfig.register("wav2vec2-branchformer", Wav2Vec2BranchformerConfig)
-AutoModelForCTC.register(Wav2Vec2BranchformerConfig, Wav2Vec2BranchformerForCTC)
-
 AutoConfig.register("wav2vec2-ebranchformer", Wav2Vec2EBranchformerConfig)
-AutoModelForCTC.register(Wav2Vec2EBranchformerConfig, Wav2Vec2EBranchformerForCTC)
+CustomAutoModelForCTC.register(Wav2Vec2EBranchformerConfig, Wav2Vec2EBranchformerForCTC)
 
 
 class JointCTCAttentionEncoderDecoderConfig(SpeechEncoderDecoderConfig):
@@ -81,7 +71,7 @@ class Seq2SeqLMOutputLosses(Seq2SeqLMOutput):
     encoder_logits: Optional[torch.FloatTensor] = None
 
 
-def wav2vec2_for_ctc_forward_hook(model: AutoModelForCTC, input: Any, output: CausalLMOutput):
+def wav2vec2_for_ctc_forward_hook(model: CustomAutoModelForCTC, input: Any, output: CausalLMOutput):
     if "hidden_states" in output:
         output.last_hidden_state = output.hidden_states[-1]
 
@@ -121,7 +111,7 @@ class JointCTCAttentionEncoderDecoder(SpeechEncoderDecoderModel):
         super(SpeechEncoderDecoderModel, self).__init__(config)
 
         if encoder is None:
-            encoder = AutoModelForCTC.from_config(config.encoder)
+            encoder = CustomAutoModelForCTC.from_config(config.encoder)
             encoder.register_forward_hook(wav2vec2_for_ctc_forward_hook)
         if decoder is None:
             decoder = AutoModelForCausalLM.from_config(config.decoder)
@@ -238,7 +228,7 @@ class JointCTCAttentionEncoderDecoder(SpeechEncoderDecoderModel):
 
                 kwargs_encoder["config"] = encoder_config
 
-            encoder = AutoModelForCTC.from_pretrained(
+            encoder = CustomAutoModelForCTC.from_pretrained(
                 encoder_pretrained_model_name_or_path, *model_args, **kwargs_encoder
             )
             encoder.register_forward_hook(wav2vec2_for_ctc_forward_hook)
@@ -335,7 +325,7 @@ class JointCTCAttentionEncoderDecoder(SpeechEncoderDecoderModel):
                 **kwargs_encoder,
             )
         elif isinstance(encoder_outputs, tuple):
-            encoder_outputs = BaseModelOutput(*encoder_outputs)
+            encoder_outputs = CausalLMOutput(*encoder_outputs)
 
         encoder_hidden_states = encoder_outputs.last_hidden_state
 
@@ -473,6 +463,39 @@ class JointCTCAttentionEncoderDecoder(SpeechEncoderDecoderModel):
                 model_kwargs["decoder_attention_mask"] = decoder_attention_mask.repeat_interleave(expand_size, dim=0)
 
         return input_ids, model_kwargs
+
+    def _prepare_encoder_decoder_kwargs_for_generation(
+        self, inputs_tensor: torch.Tensor, model_kwargs, model_input_name: Optional[str] = None
+    ) -> Dict[str, Any]:
+        # 1. get encoder
+        encoder = self.get_encoder()
+        # Compatibility with Accelerate big model inference: we need the encoder to outputs stuff on the same device
+        # as the inputs.
+        if hasattr(encoder, "_hf_hook"):
+            encoder._hf_hook.io_same_device = True
+
+        # 2. Prepare encoder args and encoder kwargs from model kwargs.
+        irrelevant_prefix = ["decoder_", "cross_attn", "use_cache"]
+        encoder_kwargs = {
+            argument: value
+            for argument, value in model_kwargs.items()
+            if not any(argument.startswith(p) for p in irrelevant_prefix)
+        }
+        encoder_signature = set(inspect.signature(encoder.forward).parameters)
+        encoder_accepts_wildcard = "kwargs" in encoder_signature or "model_kwargs" in encoder_signature
+        if not encoder_accepts_wildcard:
+            encoder_kwargs = {
+                argument: value for argument, value in encoder_kwargs.items() if argument in encoder_signature
+            }
+
+        # 3. make sure that encoder returns `ModelOutput`
+        model_input_name = model_input_name if model_input_name is not None else self.main_input_name
+        encoder_kwargs["return_dict"] = True
+        encoder_kwargs["output_hidden_states"] = True
+        encoder_kwargs[model_input_name] = inputs_tensor
+        model_kwargs["encoder_outputs"]: ModelOutput = encoder(**encoder_kwargs)
+
+        return model_kwargs
 
     def joint_beam_search(
         self,

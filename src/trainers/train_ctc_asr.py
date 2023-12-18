@@ -1,46 +1,21 @@
 """Main training script for training of CTC ASR models."""
 import sys
 
-from datasets import load_dataset, load_from_disk
-from transformers import (
-    AutoConfig,
-    AutoFeatureExtractor,
-    AutoModelForCTC,
-    AutoTokenizer,
-    EarlyStoppingCallback,
-    HfArgumentParser,
-    Trainer,
-)
+from transformers import AutoFeatureExtractor, AutoTokenizer, HfArgumentParser, Trainer
 from transformers.utils import logging
 
-from models.encoders.branchformer import (
-    Wav2Vec2BranchformerConfig,
-    Wav2Vec2BranchformerForCTC,
-)
-from models.encoders.e_branchformer import (
-    Wav2Vec2EBranchformerConfig,
-    Wav2Vec2EBranchformerForCTC,
-)
-from trainers.training_arguments import (
+from utilities.callbacks import init_callbacks
+from utilities.collators import SpeechCollatorWithPadding
+from utilities.data_utils import get_dataset
+from utilities.eval_utils import compute_metrics_ctc
+from utilities.general_utils import do_evaluate
+from utilities.model_utils import instantiate_ctc_model
+from utilities.training_arguments import (
     DataTrainingArguments,
     GeneralTrainingArguments,
     GenerationArguments,
     ModelArguments,
 )
-from training_utils import (
-    AugmentationManagerCallback,
-    Seq2SeqDataCollatorWithPadding,
-    average_checkpoints,
-    compute_metrics_ctc,
-    do_evaluate,
-    prepare_dataset,
-)
-
-AutoConfig.register("wav2vec2-branchformer", Wav2Vec2BranchformerConfig)
-AutoModelForCTC.register(Wav2Vec2BranchformerConfig, Wav2Vec2BranchformerForCTC)
-
-AutoConfig.register("wav2vec2-ebranchformer", Wav2Vec2EBranchformerConfig)
-AutoModelForCTC.register(Wav2Vec2EBranchformerConfig, Wav2Vec2EBranchformerForCTC)
 
 if __name__ == "__main__":
     logging.set_verbosity_debug()
@@ -49,110 +24,57 @@ if __name__ == "__main__":
 
     model_args, data_args, training_args, gen_args = parser.parse_args_into_dataclasses()
 
-    # 1. Create feature extractor and tokenizer
-    feature_extractor = AutoFeatureExtractor.from_pretrained(model_args.feature_extractor_name)
-
-    tokenizer = AutoTokenizer.from_pretrained(model_args.tokenizer_name)
-
-    # 2. Load dataset
-    if data_args.dataset_config is not None:
-        dataset = load_dataset(
-            data_args.dataset_name,
-            data_args.dataset_config,
-            keep_in_memory=False,
-            num_proc=data_args.preprocessing_num_workers,
-        )
-    else:
-        dataset = load_from_disk(data_args.dataset_name, keep_in_memory=False)
-
-    len_column = training_args.length_column_name
-    text_column = data_args.text_column_name
-    audio_column = data_args.audio_column_name
-    sampling_rate = model_args.sampling_rate
-    max_input_len = data_args.max_duration_in_seconds
-    min_input_len = data_args.min_duration_in_seconds
-
-    # 3. Preprocess dataset
-    logger.info("Preprocessing dataset...")
-    dataset = prepare_dataset(
-        dataset=dataset,
+    # 1. Collect, preprocess dataset and extract evaluation dataset
+    dataset = get_dataset(
+        datasets_creation_config_path=data_args.datasets_creation_config,
         dataset_name=data_args.dataset_name,
-        length_column_name=len_column,
-        text_column_name=text_column,
-        audio_column_name=audio_column,
+        dataset_config=data_args.dataset_config,
         preprocessing_num_workers=data_args.preprocessing_num_workers,
         writer_batch_size=data_args.writer_batch_size,
+        sampling_rate=data_args.sampling_rate,
+        max_input_len=data_args.max_duration_in_seconds,
+        min_input_len=data_args.min_duration_in_seconds,
+        len_column=training_args.length_column_name,
+        text_column=data_args.text_column_name,
+        audio_column=data_args.audio_column_name,
         train_split=data_args.train_split,
+        validation_split=data_args.validation_split,
+        unk_token=data_args.unk_token,
         fix_apostrophes=data_args.fix_apostrophes,
         remove_train_unks=data_args.remove_train_unks,
-        apply_augmentations=data_args.apply_augmentations,
-        unk_token=tokenizer.unk_token,
-        sampling_rate=sampling_rate,
-        max_input_len=max_input_len,
-        min_input_len=min_input_len,
+        do_lower_case=data_args.do_lower_case,
+        remove_punctuation=data_args.remove_punctuation,
     )
+    training_eval_dataset = (
+        dataset[data_args.validation_split].shuffle().select(range(data_args.validation_slice))
+        if data_args.validation_slice
+        else dataset[data_args.validation_split]
+    )
+    logger.info(f"Dataset processed successfully.{dataset}")
 
     if training_args.preprocess_dataset_only:
         logger.info("Finished preprocessing dataset.")
         sys.exit(0)
 
-    base_model_config = {
-        "bos_token_id": tokenizer.bos_token_id,
-        "eos_token_id": tokenizer.eos_token_id,
-        "pad_token_id": tokenizer.pad_token_id,
-        "mask_token_id": tokenizer.mask_token_id,
-        "feat_proj_dropout": 0.0,
-        "layerdrop": 0.0,
-        "min_length": 0,
-        "no_repeat_ngram_size": 0,
-        "early_stopping": False,
-        "num_beams": gen_args.num_beams,
-        "ctc_weight": training_args.ctc_weight,
-        "ctc_loss_reduction": "mean",
-        "vocab_size": len(tokenizer),
-        "lsm_factor": training_args.lsm_factor,
-        "shared_lm_head": training_args.shared_lm_head,
-        "use_fbanks": training_args.use_fbanks,
-        "apply_spec_augment": training_args.apply_spec_augment,
-    }
-    if hasattr(feature_extractor, "num_mel_bins"):
-        base_model_config["num_mel_bins"] = feature_extractor.num_mel_bins
+    # 2. Create feature extractor and tokenizer
+    feature_extractor = AutoFeatureExtractor.from_pretrained(training_args.feature_extractor_name)
+    tokenizer = AutoTokenizer.from_pretrained(training_args.tokenizer_name)
 
-    # 4. Initialize seq2seq model
-    if model_args.from_pretrained:
-        config = AutoConfig.from_pretrained(model_args.from_pretrained)
-        config.update(base_model_config)
-        model_path = model_args.from_pretrained
-        if model_args.average_checkpoints:
-            model_path = average_checkpoints(model_path)
-        model = AutoModelForCTC.from_pretrained(model_path, config=config)
-    else:
-        config = AutoConfig.from_pretrained(model_args.base_encoder_model)
-        config.update(base_model_config)
-        model = AutoModelForCTC.from_config(config)
+    # 3. Instantiate model
+    model = instantiate_ctc_model(model_args, tokenizer, feature_extractor)
 
-    # 5. Init trainer
-    callbacks = []
-    if training_args.apply_spec_augment:
-        callbacks.append(
-            AugmentationManagerCallback(training_args.num_steps_to_activate_spec_augment, model_config_path="config")
-        )
-    if training_args.early_stopping_patience > -1:
-        callbacks.append(EarlyStoppingCallback(early_stopping_patience=training_args.early_stopping_patience))
+    # 4. Initialize callbacks
+    callbacks = init_callbacks(data_args, training_args, dataset, feature_extractor)
 
-    data_collator = Seq2SeqDataCollatorWithPadding(
+    # 5. Initialize data collator
+    data_collator = SpeechCollatorWithPadding(
         feature_extractor=feature_extractor,
         tokenizer=tokenizer,
         padding=True,
-        sampling_rate=model_args.sampling_rate,
+        sampling_rate=data_args.sampling_rate,
         audio_path=data_args.audio_column_name,
         text_path=data_args.text_column_name,
-        rename_features=training_args.collator_rename_features,
-    )
-    training_eval_dataset = (
-        dataset[data_args.validation_split].select(range(data_args.validation_slice))
-        if data_args.validation_slice
-        else dataset[data_args.validation_split]
+        model_input_name=model.main_input_name,
     )
 
     trainer = Trainer(
@@ -176,7 +98,8 @@ if __name__ == "__main__":
             dataset=dataset,
             model=model,
             tokenizer=tokenizer,
-            gen_args=gen_args,
+            gen_args=None,
+            data_args=data_args,
             training_args=training_args,
-            eos_token_id=base_model_config["eos_token_id"],
+            eos_token_id=tokenizer.eos_token_id,
         )

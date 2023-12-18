@@ -31,7 +31,7 @@ class GPT2MultiHeadConfig(GPT2Config):
 class GPT2LMMultiHeadModel(GPT2LMHeadModel):
     config_class = GPT2MultiHeadConfig
 
-    def __init__(self, config):
+    def __init__(self, config: GPT2MultiHeadConfig):
         super().__init__(config)
         if config.head_locations is not None:
             if not len(config.head_locations) + 1 == len(config.head_weights):

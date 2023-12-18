@@ -20,7 +20,7 @@ class GPT2ResidualsLMHeadConfig(GPT2Config):
 class GPT2ResidualsLMHeadModel(GPT2LMHeadModel):
     config_class = GPT2ResidualsLMHeadConfig
 
-    def __init__(self, config):
+    def __init__(self, config: GPT2ResidualsLMHeadConfig):
         super().__init__(config)
         self.connected_residuals = config.connected_residuals
         self.lm_head = nn.Linear(config.n_embd * len(self.connected_residuals), config.vocab_size, bias=False)

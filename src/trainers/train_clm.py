@@ -40,7 +40,7 @@ from huggingface_hub import repo_exists
 # pylint: disable=wrong-import-order
 from transformers import AutoConfig, AutoModelForCausalLM
 
-from models.decoders.multi_head_GPT2 import GPT2LMMultiHeadModel, GPT2MultiHeadConfig
+from models.decoders.multi_head_gpt2 import GPT2LMMultiHeadModel, GPT2MultiHeadConfig
 
 AutoConfig.register("gpt2-multi-head", GPT2MultiHeadConfig)
 AutoModelForCausalLM.register(GPT2MultiHeadConfig, GPT2LMMultiHeadModel)
@@ -62,7 +62,7 @@ from transformers.testing_utils import CaptureLogger
 from transformers.trainer_utils import get_last_checkpoint
 from transformers.utils.versions import require_version
 
-from trainers.training_arguments import GeneralTrainingArguments
+from utilities.training_arguments import GeneralTrainingArguments
 
 require_version("datasets>=1.8.0", "To fix: pip install -r examples/pytorch/language-modeling/requirements.txt")
 
