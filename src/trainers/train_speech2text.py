@@ -84,6 +84,7 @@ if __name__ == "__main__":
         "pad_token_id": tokenizer.pad_token_id,
         "encoder_pad_token_id": tokenizer.pad_token_id,
         "decoder_vocab_size": len(tokenizer),
+        "vocab_size": len(tokenizer), # s2t specific
         "lsm_factor": model_args.lsm_factor,
         "shared_lm_head": model_args.shared_lm_head,
         "encoder_expect_2d_input": model_args.expect_2d_input,
@@ -97,6 +98,7 @@ if __name__ == "__main__":
     s2t_config.update(base_model_config)
 
     model = Speech2TextForConditionalGeneration(config=s2t_config)
+    logger.info(f"Finished loading model {model}")
 
     # 4. Update generation config
     gen_config = GenerationConfig(
