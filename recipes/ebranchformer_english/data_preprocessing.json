@@ -9,7 +9,7 @@
           1.1
         ]
       },
-      "steps_before_activation": 2,
+      "steps_before_activation": 0,
       "return_behaviour": [
         0
       ],

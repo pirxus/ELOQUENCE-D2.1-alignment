@@ -30,7 +30,7 @@ args=(
   # General training arguments
   --output_dir=$EXPERIMENT_PATH
   --per_device_train_batch_size="32"
-  --per_device_eval_batch_size="32"
+  --per_device_eval_batch_size="16"
   --dataloader_num_workers="24"
   --num_train_epochs="100"
   --group_by_length="True"
@@ -42,11 +42,11 @@ args=(
 
   # Optimizer related arguments
   --optim="adamw_torch"
-  --learning_rate="2e-3"
-  --warmup_steps="20000"
+  --learning_rate="5e-3"
+  --warmup_steps="30000"
   --early_stopping_patience="5"
   --weight_decay="1e-6"
-  --max_grad_norm="5.0"
+  --max_grad_norm="1.0"
   --lsm_factor="0.1"
   --gradient_accumulation_steps="1"
 
