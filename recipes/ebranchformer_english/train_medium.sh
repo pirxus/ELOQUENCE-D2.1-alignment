@@ -5,9 +5,9 @@
 #SBATCH --gpus 8
 #SBATCH --nodes 1
 #SBATCH --time 2-00:00:00
-#SBATCH --output=/mnt/proj1/open-28-58/lakoc/huggingface_asr/outputs/ebranchformer_english_medium.out
+#SBATCH --output=/mnt/proj1/open-28-58/lakoc/huggingface_asr/outputs/ebranchformer_english_medium2.out
 
-EXPERIMENT="ebranchformer_english_medium"
+EXPERIMENT="ebranchformer_english_medium2"
 PROJECT="regularizations_english_corpus"
 WORK_DIR="/mnt/proj1/open-28-58/lakoc/huggingface_asr"
 ENV_DIR="/mnt/proj1/open-28-58/lakoc/LoCo-ASR"
@@ -29,9 +29,8 @@ cd $WORK_DIR
 args=(
   # General training arguments
   --output_dir=$EXPERIMENT_PATH
-  --per_device_train_batch_size="48"
-  --auto_find_batch_size
-  --per_device_eval_batch_size="48"
+  --per_device_train_batch_size="32"
+  --per_device_eval_batch_size="32"
   --dataloader_num_workers="24"
   --num_train_epochs="100"
   --group_by_length="True"
