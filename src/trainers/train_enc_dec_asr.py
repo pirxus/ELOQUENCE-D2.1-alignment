@@ -91,6 +91,8 @@ if __name__ == "__main__":
         num_beams=gen_args.num_beams,
     )
     logger.info(f"Model updating generation config:\n {str(gen_config)}")
+    training_args.generation_max_length = gen_args.max_length
+    training_args.generation_num_beams = gen_args.num_beams
     model.generation_config = gen_config
 
     if isinstance(model, WhisperForConditionalGeneration) and model_args.whisper_task and model_args.whisper_language:
