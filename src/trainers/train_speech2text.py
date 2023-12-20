@@ -59,6 +59,7 @@ if __name__ == "__main__":
         remove_punctuation=data_args.remove_punctuation,
         remove_commas_stops=data_args.remove_commas_stops,
         remove_listed_chars=data_args.remove_listed_chars,
+        lcrm=data_args.lcrm,
     )
 
     if data_args.validation_slice:
