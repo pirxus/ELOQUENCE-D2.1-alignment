@@ -38,6 +38,7 @@ if __name__ == "__main__":
         datasets_creation_config_path=data_args.datasets_creation_config,
         dataset_name=data_args.dataset_name,
         dataset_config=data_args.dataset_config,
+        data_dir=data_args.data_dir,
         preprocessing_num_workers=data_args.preprocessing_num_workers,
         writer_batch_size=data_args.writer_batch_size,
         sampling_rate=data_args.sampling_rate,
@@ -53,6 +54,9 @@ if __name__ == "__main__":
         remove_train_unks=data_args.remove_train_unks,
         do_lower_case=data_args.do_lower_case,
         remove_punctuation=data_args.remove_punctuation,
+        remove_commas_stops=data_args.remove_commas_stops,
+        remove_listed_chars=data_args.remove_listed_chars,
+        lcrm=data_args.lcrm,
     )
 
     if data_args.validation_slice:
