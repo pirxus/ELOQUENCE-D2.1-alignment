@@ -104,8 +104,8 @@ if __name__ == "__main__":
     gen_config = GenerationConfig(
         bos_token_id=tokenizer.bos_token_id,
         pad_token_id=tokenizer.pad_token_id,
-        #decoder_start_token_id=tokenizer.bos_token_id,
-        decoder_start_token_id=tokenizer.eos_token_id,
+        decoder_start_token_id=tokenizer.bos_token_id,
+        decoder_end_token_id=tokenizer.eos_token_id,
         length_penalty=gen_args.length_penalty,
         #early_stopping=gen_args.early_stopping,
         early_stopping=True,
