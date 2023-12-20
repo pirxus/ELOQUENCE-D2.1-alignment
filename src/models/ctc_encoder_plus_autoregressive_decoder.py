@@ -47,6 +47,11 @@ from models.encoders.e_branchformer import (
     Wav2Vec2EBranchformerForCTC,
 )
 
+from models.encoders.s2t_ctc import (
+        Speech2TextEncoderForCTC,
+        Speech2TextForCTCConfig
+    )
+
 logger = logging.get_logger("transformers")
 
 AutoConfig.register("gpt2-multi-head", GPT2MultiHeadConfig)
@@ -57,6 +62,9 @@ AutoModelForCausalLM.register(GPT2ResidualsLMHeadConfig, GPT2ResidualsLMHeadMode
 
 AutoConfig.register("wav2vec2-ebranchformer", Wav2Vec2EBranchformerConfig)
 CustomAutoModelForCTC.register(Wav2Vec2EBranchformerConfig, Wav2Vec2EBranchformerForCTC)
+
+AutoConfig.register("s2t-ctc-encoder", Speech2TextForCTCConfig)
+CustomAutoModelForCTC.register(Speech2TextForCTCConfig, Speech2TextEncoderForCTC)
 
 
 class JointCTCAttentionEncoderDecoderConfig(SpeechEncoderDecoderConfig):
