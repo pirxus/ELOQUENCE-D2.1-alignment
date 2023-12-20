@@ -34,7 +34,8 @@ class DelayedStartWrapper:
         self.active = False
 
     def new_step(self, step: int):
-        if step >= self.start_at:
+        if step >= self.start_at and not self.active:
+            logger.info(f"Activated preprocessing function: {str(self.callback.func)}")
             self.active = True
 
     def __call__(self, *args, **kwargs):
@@ -45,11 +46,11 @@ class DelayedStartWrapper:
 
 class DataPreprocessingManagerCallback(TrainerCallback):
     def __init__(
-            self,
-            preprocessing_config: Dict[str, List[Dict]],
-            dataset: DatasetDict,
-            audio_column_name: str,
-            feature_extractor: SequenceFeatureExtractor,
+        self,
+        preprocessing_config: Dict[str, List[Dict]],
+        dataset: DatasetDict,
+        audio_column_name: str,
+        feature_extractor: SequenceFeatureExtractor,
     ):
         super().__init__()
         self.dataset = dataset
@@ -78,8 +79,8 @@ class DataPreprocessingManagerCallback(TrainerCallback):
     def transformer(audio: Union[np.ndarray, torch.Tensor], transforms: List[Tuple[DelayedStartWrapper, Dict]]):
         if not isinstance(audio, torch.Tensor):
             audio = torch.tensor(audio, dtype=torch.float32)
-        for augmentation, fn_call_params in transforms:
-            audio = augmentation(audio, **fn_call_params)
+        for transform, fn_call_params in transforms:
+            audio = transform(audio, **fn_call_params)
         return audio
 
     def default_transform(self, batch, transform_key):
@@ -127,10 +128,10 @@ class AdditionalLossPrinterCallback(TrainerCallback):
 
 
 def init_callbacks(
-        data_args: DataTrainingArguments,
-        training_args: GeneralTrainingArguments,
-        dataset: DatasetDict,
-        feature_extractor: SequenceFeatureExtractor,
+    data_args: DataTrainingArguments,
+    training_args: GeneralTrainingArguments,
+    dataset: DatasetDict,
+    feature_extractor: SequenceFeatureExtractor,
 ):
     callbacks = []
     if data_args.data_preprocessing_config:
