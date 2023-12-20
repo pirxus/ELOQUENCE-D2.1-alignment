@@ -103,6 +103,11 @@ def remove_punctuation_batched(batch: List[str], label_column: str) -> Dict[str,
     return {label_column: [example.translate(str.maketrans("", "", string.punctuation)) for example in batch]}
 
 
+def lcrm_batched(batch: List[str], label_column: str) -> Dict[str, List[str]]:
+    """Removes punctuation (except apostrophes -- lcrm) from batch."""
+    return {label_column: [example.translate(str.maketrans("", "", string.punctuation.replace("'", ""))) for example in batch]}
+
+
 def remove_listed_chars_batched(batch: List[str], label_column: str, chars: str) -> Dict[str, List[str]]:
     """Removes characters specified in the 'chars' string from batch."""
     return {label_column: [example.translate(str.maketrans("", "", chars)) for example in batch]}
@@ -138,6 +143,7 @@ def prepare_dataset(
     remove_commas_stops: bool = False,
     skip_audio_processing: bool = False,
     remove_listed_chars: Optional[str] = None,
+    lcrm: bool = False,
 ) -> DatasetDict:
     """Preprocesses dataset."""
     if not skip_audio_processing:
@@ -178,6 +184,17 @@ def prepare_dataset(
         logger.info(f"Removing punctuation from dataset.")
         dataset = dataset.map(
             remove_punctuation_batched,
+            input_columns=[text_column_name],
+            batched=True,
+            num_proc=preprocessing_num_workers,
+            writer_batch_size=writer_batch_size,
+            fn_kwargs={"label_column": text_column_name},
+        )
+
+    if lcrm:
+        logger.info(f"Removing punctuation (except apostrophes -- lcrm) from dataset.")
+        dataset = dataset.map(
+            lcrm_batched,
             input_columns=[text_column_name],
             batched=True,
             num_proc=preprocessing_num_workers,
@@ -414,6 +431,7 @@ def get_dataset(
     skip_audio_processing: bool = False,
     data_dir: Optional[str] = None,
     remove_listed_chars: Optional[str] = None,
+    lcrm: bool = False,
 ) -> DatasetDict:
     """Loads single or multiple datasets, preprocess, and merge them."""
     if datasets_creation_config_path is not None:
@@ -467,5 +485,6 @@ def get_dataset(
             remove_commas_stops=remove_commas_stops,
             skip_audio_processing=skip_audio_processing,
             remove_listed_chars=remove_listed_chars,
+            lcrm=lcrm,
         )
     return dataset
