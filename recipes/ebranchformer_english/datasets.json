@@ -96,7 +96,7 @@
     "fix_apostrophes": true,
     "remove_train_unks": false,
     "do_lower_case": true,
-    "remove_punctuation": true,
+    "remove_punctuation": false,
     "unk_token": "<unk>",
     "additional_args": {
       "name": "release3"
