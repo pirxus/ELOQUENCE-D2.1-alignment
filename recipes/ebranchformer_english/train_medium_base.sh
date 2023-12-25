@@ -89,7 +89,6 @@ args=(
   --max_length="512"
   --predict_with_generate
   --decoding_ctc_weight="0.3"
-  --eval_beam_factor="5"
 )
 
 torchrun --standalone --nnodes=1 --nproc-per-node=8 src/trainers/train_enc_dec_asr.py "${args[@]}"
