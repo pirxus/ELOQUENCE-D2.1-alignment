@@ -371,18 +371,21 @@ def load_multiple_datasets(
     dataset_merged = DatasetDict()
     for dataset_config in config_dict:
         logger.info(f"Loading dataset {dataset_config['dataset_name']}")
-        if dataset_config["load_from_disk"]:
-            dataset = load_from_disk(
-                dataset_config["dataset_name"], keep_in_memory=False, **dataset_config["additional_args"]
-            )
+        with DistributedContext() as context:
+            context.wait_before()
+            if dataset_config["load_from_disk"]:
+                dataset = load_from_disk(
+                    dataset_config["dataset_name"], keep_in_memory=False, **dataset_config["additional_args"]
+                )
 
-        else:
-            dataset = load_dataset(
-                dataset_config["dataset_name"],
-                keep_in_memory=False,
-                num_proc=num_proc,
-                **dataset_config["additional_args"],
-            )
+            else:
+                dataset = load_dataset(
+                    dataset_config["dataset_name"],
+                    keep_in_memory=False,
+                    num_proc=num_proc,
+                    **dataset_config["additional_args"],
+                )
+            context.wait_after()
         new_train_split_name = global_train_split if len(dataset_config["train_splits"]) > 0 else None
         new_dev_split_name = global_validation_split if len(dataset_config["dev_splits"]) > 0 else None
         dataset = merge_splits(dataset, dataset_config["train_splits"], new_train_split_name)
@@ -468,12 +471,15 @@ def get_dataset(
             global_validation_split=validation_split,
         )
     else:
-        if dataset_config is not None:
-            dataset = load_dataset(
-                dataset_name, dataset_config, keep_in_memory=False, num_proc=preprocessing_num_workers
-            )
-        else:
-            dataset = load_from_disk(dataset_name, keep_in_memory=False)
+        with DistributedContext() as context:
+            context.wait_before()
+            if dataset_config is not None:
+                dataset = load_dataset(
+                    dataset_name, dataset_config, keep_in_memory=False, num_proc=preprocessing_num_workers
+                )
+            else:
+                dataset = load_from_disk(dataset_name, keep_in_memory=False)
+            context.wait_after()
 
         # 3. Preprocess dataset
         dataset = prepare_dataset(
