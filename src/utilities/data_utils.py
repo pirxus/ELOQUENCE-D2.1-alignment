@@ -5,6 +5,7 @@ import string
 from typing import Dict, List, Union
 
 import numpy as np
+import torch.distributed
 from datasets import (
     Audio,
     Dataset,
@@ -19,6 +20,51 @@ from transformers.utils import logging
 logger = logging.get_logger("transformers")
 
 tedlium_contractions = [" 's", " 't", " 're", " 've", " 'm", " 'll", " 'd", " 'clock", " 'all"]
+
+
+class DistributedContext:
+    """Context manager for distributed training."""
+
+    def __init__(self):
+        """Initializes distributed context."""
+        self.local_rank = None
+        self.world_size = None
+
+    def __enter__(self):
+        """Initializes distributed context."""
+        if torch.distributed.is_available() and torch.distributed.is_initialized():
+            self.local_rank = torch.distributed.get_rank()
+            self.world_size = torch.distributed.get_world_size()
+        else:
+            self.local_rank = 0
+            self.world_size = 1
+        return self
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        """Performs barrier synchronization."""
+        if self.world_size > 1:
+            torch.distributed.barrier()
+
+    def wait_before(self):
+        if self.world_size > 1:
+            if self.local_rank > 0:
+                logger.info(f"Rank {self.local_rank}: Waiting for main process to perform the mapping")
+                torch.distributed.barrier()
+
+    def wait_after(self):
+        if self.world_size > 1:
+            if self.local_rank == 0:
+                logger.info(f"Rank {self.local_rank}: Waiting for other processes to finish")
+                torch.distributed.barrier()
+
+
+def distributed_process(dataset, process_by, **kwargs):
+    """Performs distributed processing of dataset."""
+    with DistributedContext() as context:
+        context.wait_before()
+        mapped_dataset = getattr(dataset, process_by)(**kwargs)
+        context.wait_after()
+    return mapped_dataset
 
 
 def audio_object_stripper(audio: Union[Dict, np.ndarray, List[float]], key="array"):
@@ -127,10 +173,13 @@ def prepare_dataset(
     min_input_len: float,
 ) -> DatasetDict:
     """Preprocesses dataset."""
+
     if length_column_name not in set().union(*dataset.column_names.values()) or "kaldi_dataset" in dataset_name:
         logger.info(f"Extracting audio lens.")
-        dataset = dataset.map(
-            extract_lens_batched,
+        dataset = distributed_process(
+            dataset,
+            process_by="map",
+            function=extract_lens_batched,
             num_proc=preprocessing_num_workers,
             input_columns=[audio_column_name],
             batched=True,
@@ -140,8 +189,10 @@ def prepare_dataset(
 
     if train_split is not None:
         logger.info(f"Filtering out too long and too short sequences from dataset.")
-        dataset[train_split] = dataset[train_split].filter(
-            filter_sequences_in_range_batched,
+        dataset[train_split] = distributed_process(
+            dataset[train_split],
+            process_by="filter",
+            function=filter_sequences_in_range_batched,
             batched=True,
             input_columns=[length_column_name],
             num_proc=preprocessing_num_workers,
@@ -151,8 +202,10 @@ def prepare_dataset(
 
     if do_lower_case:
         logger.info(f"Lower casing dataset.")
-        dataset = dataset.map(
-            do_lower_case_batched,
+        dataset = distributed_process(
+            dataset,
+            process_by="map",
+            function=do_lower_case_batched,
             input_columns=[text_column_name],
             batched=True,
             num_proc=preprocessing_num_workers,
@@ -162,25 +215,31 @@ def prepare_dataset(
 
     if remove_punctuation:
         logger.info(f"Removing punctuation from dataset.")
-        dataset = dataset.map(
-            remove_punctuation_batched,
+        dataset = distributed_process(
+            dataset,
+            process_by="map",
+            function=remove_punctuation_batched,
             input_columns=[text_column_name],
             batched=True,
             num_proc=preprocessing_num_workers,
             writer_batch_size=writer_batch_size,
             fn_kwargs={"label_column": text_column_name},
         )
-
     logger.info(f"Filtering unlabeled data from dataset.")
-    dataset = dataset.filter(
-        filter_wrongly_annotated_segments_batched,
+    dataset = distributed_process(
+        dataset,
+        process_by="filter",
+        function=filter_wrongly_annotated_segments_batched,
         batched=True,
         input_columns=[text_column_name],
         writer_batch_size=writer_batch_size,
         num_proc=preprocessing_num_workers,
     )
-    dataset = dataset.filter(
-        filter_empty_transcriptions,
+
+    dataset = distributed_process(
+        dataset,
+        process_by="filter",
+        function=filter_empty_transcriptions,
         input_columns=[text_column_name],
         batched=True,
         writer_batch_size=writer_batch_size,
@@ -189,8 +248,10 @@ def prepare_dataset(
 
     if train_split is not None and remove_train_unks:
         logger.info(f"Removing UNKs from training data.")
-        dataset[train_split] = dataset[train_split].map(
-            remove_unks_batched,
+        dataset[train_split] = distributed_process(
+            dataset[train_split],
+            process_by="map",
+            function=remove_unks_batched,
             batched=True,
             input_columns=[text_column_name],
             num_proc=preprocessing_num_workers,
@@ -200,8 +261,10 @@ def prepare_dataset(
 
     if fix_apostrophes:
         logger.info(f"Fixing apostrophes in dataset.")
-        dataset = dataset.map(
-            fix_apostrophes_batched,
+        dataset = distributed_process(
+            dataset,
+            process_by="map",
+            function=fix_apostrophes_batched,
             input_columns=[text_column_name],
             batched=True,
             num_proc=preprocessing_num_workers,
@@ -211,8 +274,10 @@ def prepare_dataset(
 
     if dataset_name == "mozilla-foundation/common_voice_13_0":
         logger.info(f"Fixing labels for commonvoice.")
-        dataset = dataset.map(
-            preprocess_cv_labels,
+        dataset = distributed_process(
+            dataset,
+            process_by="map",
+            function=preprocess_cv_labels,
             input_columns=[text_column_name],
             batched=True,
             writer_batch_size=writer_batch_size,
@@ -221,8 +286,10 @@ def prepare_dataset(
         )
 
     logger.info("Striping and removing multiple spaces.")
-    dataset = dataset.map(
-        remove_multiple_whitespaces_and_strip_batched,
+    dataset = distributed_process(
+        dataset,
+        process_by="map",
+        function=remove_multiple_whitespaces_and_strip_batched,
         input_columns=[text_column_name],
         batched=True,
         num_proc=preprocessing_num_workers,
@@ -231,8 +298,19 @@ def prepare_dataset(
     )
 
     logger.info("Casting audio column to Audio.")
-    dataset = dataset.cast_column(audio_column_name, Audio(sampling_rate=sampling_rate))
-    dataset = dataset.cast_column(length_column_name, Value(dtype="float32"))
+    dataset = distributed_process(
+        dataset,
+        process_by="cast_column",
+        column=audio_column_name,
+        feature=Audio(sampling_rate=sampling_rate),
+    )
+    dataset = distributed_process(
+        dataset,
+        process_by="cast_column",
+        column=length_column_name,
+        feature=Value(dtype="float32"),
+    )
+
     logger.info(str(dataset))
     return dataset
 
