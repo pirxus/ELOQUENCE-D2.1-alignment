@@ -90,7 +90,7 @@ args=(
   --max_length="512"
   --predict_with_generate
   --decoding_ctc_weight="0.3"
-  --restart_from="/mnt/proj1/open-28-58/lakoc/huggingface_asr/experiments/ebranchformer_english_medium_regularized/checkpoint-386100"
+  --restart_from="/mnt/proj1/open-28-58/lakoc/huggingface_asr/experiments/ebranchformer_english_medium_regularized/checkpoint-414700"
   --ignore_data_skip
 )
 
