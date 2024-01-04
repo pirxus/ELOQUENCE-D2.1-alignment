@@ -79,7 +79,7 @@ args=(
   --tokenizer_name="Lakoc/english_corpus_uni5000"
   --feature_extractor_name="Lakoc/log_80mel_extractor_16k"
   --base_encoder_model="Lakoc/ebranchformer_16l_512h"
-  --base_decoder_model="Lakoc/gpt2_512h_16l_add_head14"
+  --base_decoder_model="Lakoc/gpt2_512h_8l_add_head6_04"
   --ctc_weight="0.3"
   --decoder_pos_emb_fixed
   --expect_2d_input

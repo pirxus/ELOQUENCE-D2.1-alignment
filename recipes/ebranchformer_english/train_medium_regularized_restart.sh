@@ -5,7 +5,7 @@
 #SBATCH --gpus 8
 #SBATCH --nodes 1
 #SBATCH --time 2-00:00:00
-#SBATCH --output=/mnt/proj1/open-28-58/lakoc/huggingface_asr/outputs/ebranchformer_english_medium_regularized_restart.out
+#SBATCH --output=/mnt/proj1/open-28-58/lakoc/huggingface_asr/outputs/ebranchformer_english_medium_regularized_restart_proper.out
 
 EXPERIMENT="ebranchformer_english_medium_regularized"
 PROJECT="regularizations_english_corpus"
@@ -17,7 +17,7 @@ export HF_HOME="/scratch/project/open-28-57/lakoc/huggingface_cache"
 export PYTHONPATH="${PYTHONPATH}:${WORK_DIR}/src"
 export OMP_NUM_THREADS=64
 export WANDB_PROJECT=$PROJECT
-export WANDB_RUN_ID="${EXPERIMENT}_restart"
+export WANDB_RUN_ID="${EXPERIMENT}_restart_proper"
 
 conda deactivate
 source activate loco_asr
@@ -80,7 +80,7 @@ args=(
   --tokenizer_name="Lakoc/english_corpus_uni5000"
   --feature_extractor_name="Lakoc/log_80mel_extractor_16k"
   --base_encoder_model="Lakoc/ebranchformer_16l_512h"
-  --base_decoder_model="Lakoc/gpt2_512h_16l_add_head14"
+  --base_decoder_model="Lakoc/gpt2_512h_8l_add_head6_04"
   --ctc_weight="0.3"
   --decoder_pos_emb_fixed
   --expect_2d_input
@@ -90,9 +90,8 @@ args=(
   --max_length="512"
   --predict_with_generate
   --decoding_ctc_weight="0.3"
-
+  --restart_from="/mnt/proj1/open-28-58/lakoc/huggingface_asr/experiments/ebranchformer_english_medium_regularized/checkpoint-386100"
   --ignore_data_skip
-  --resume_from="/mnt/proj1/open-28-58/lakoc/huggingface_asr/experiments/ebranchformer_english_medium_regularized/checkpoint-386100"
 )
 
 torchrun --standalone --nnodes=1 --nproc-per-node=8 src/trainers/train_enc_dec_asr.py "${args[@]}"
