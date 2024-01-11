@@ -1,3 +1,4 @@
+import os
 import pickle  # nosec
 from typing import Dict, List, Optional
 
@@ -128,6 +129,15 @@ def save_predictions(tokenizer: PreTrainedTokenizer, predictions: PredictionOutp
     label_str = [label if label else "-" for label in tokenizer.batch_decode(label_ids, skip_special_tokens=True)]
     df = pd.DataFrame({"label": label_str, "prediction": pred_str})
     df.to_csv(path, index=False)
+
+    sclite_files = [path.replace(".csv", f"_{type}.trn") for type in ["hyp", "ref"]]
+    for strings, file_to_save in zip([pred_str, label_str], sclite_files):
+        with open(file_to_save, "w") as file_handler:
+            for index, string in enumerate(strings):
+                file_handler.write(f"{string} (utterance_{index})\n")
+
+    # evaluate wer also with sclite
+    os.system(f"sclite -F -D -i wsj -r {sclite_files[1]} trn -h {sclite_files[0]} trn -o snt sum")  # nosec
 
 
 def check_and_activate_joint_decoding(
