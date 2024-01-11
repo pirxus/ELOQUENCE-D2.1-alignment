@@ -237,25 +237,18 @@ def prepare_dataset(
         desc="Filtering out empty transcriptions",
     )
 
-    logger.info("Casting audio column to Audio")
-    dataset = distributed_process(
-        dataset,
-        process_by="cast_column",
-        column=audio_column_name,
-        writer_batch_size=writer_batch_size,
-        num_proc=preprocessing_num_workers,
-        feature=Audio(sampling_rate=sampling_rate),
-    )
-
-    logger.info("Casting length column to float32")
-    dataset = distributed_process(
-        dataset,
-        process_by="cast_column",
-        column=length_column_name,
-        writer_batch_size=writer_batch_size,
-        num_proc=preprocessing_num_workers,
-        feature=Value(dtype="float32"),
-    )
+    logger.info("Casting audio column to Audio, and length column to float32")
+    feature_types = dataset[list(dataset.keys())[0]].features
+    feature_types[audio_column_name] = Audio(sampling_rate=sampling_rate)
+    feature_types[length_column_name] = Value(dtype="float32")
+    for split in dataset:
+        dataset[split] = distributed_process(
+            dataset[split],
+            process_by="cast",
+            writer_batch_size=writer_batch_size,
+            num_proc=preprocessing_num_workers,
+            features=feature_types,
+        )
 
     logger.info(str(dataset))
     return dataset
