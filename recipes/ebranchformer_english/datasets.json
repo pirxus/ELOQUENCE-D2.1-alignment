@@ -18,7 +18,7 @@
     "length_column_name": "input_len",
     "text_transformations": [
       "whisper_normalize_english",
-      "clean_annotations_english_train",
+      "clean_special_tokens_english_train",
       "transforms_unfinished_words_to_unks_train"
     ],
     "additional_args": {
@@ -44,7 +44,7 @@
     "length_column_name": "input_len",
     "text_transformations": [
       "whisper_normalize_english",
-      "clean_annotations_english_train",
+      "clean_special_tokens_english_train",
       "transforms_unfinished_words_to_unks_train"
     ],
     "additional_args": {
@@ -70,7 +70,7 @@
     "length_column_name": "input_len",
     "text_transformations": [
       "whisper_normalize_english",
-      "clean_annotations_english_train",
+      "clean_special_tokens_english_train",
       "transforms_unfinished_words_to_unks_train"
     ],
     "additional_args": {
@@ -95,7 +95,7 @@
     "length_column_name": "input_len",
     "text_transformations": [
       "whisper_normalize_english",
-      "clean_annotations_english_train",
+      "clean_special_tokens_english_train",
       "transforms_unfinished_words_to_unks_train"
     ],
     "additional_args": {
@@ -124,7 +124,7 @@
     "length_column_name": "input_len",
     "text_transformations": [
       "whisper_normalize_english",
-      "clean_annotations_english_train",
+      "clean_special_tokens_english_train",
       "transforms_unfinished_words_to_unks_train"
     ],
     "additional_args": {
@@ -149,7 +149,7 @@
     "length_column_name": "input_len",
     "text_transformations": [
       "whisper_normalize_english",
-      "clean_annotations_english_train",
+      "clean_special_tokens_english_train",
       "transforms_unfinished_words_to_unks_train"
     ],
     "additional_args": {
@@ -173,7 +173,7 @@
     "length_column_name": "input_len",
     "text_transformations": [
       "whisper_normalize_english",
-      "clean_annotations_english_train",
+      "clean_special_tokens_english_train",
       "transforms_unfinished_words_to_unks_train"
     ],
     "additional_args": {
