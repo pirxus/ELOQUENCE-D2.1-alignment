@@ -1,9 +1,9 @@
 #!/usr/bin/bash
 #SBATCH --job-name TED
 #SBATCH --account OPEN-28-57
-#SBATCH --partition qcpu
+#SBATCH --partition qcpu_exp
 #SBATCH --nodes 1
-#SBATCH --time 24:00:00
+#SBATCH --time 1:00:00
 #SBATCH --output=/mnt/proj1/open-28-58/lakoc/huggingface_asr/outputs/ebranchformer_english_tokenizer_normalized.out
 
 EXPERIMENT="ebranchformer_english_tokenizer_normalized"
@@ -28,9 +28,9 @@ python src/trainers/train_tokenizer.py \
   --min_duration_in_seconds="0.0" \
   --output_dir=$EXPERIMENT_PATH \
   --length_column_name="input_len" \
-  --preprocessing_num_workers="64" \
+  --preprocessing_num_workers="32" \
   --datasets_creation_config="${RECIPE_DIR}/datasets.json" \
-  --writer_batch_size="5000" \
+  --writer_batch_size="500" \
   --tokenizer_name="Lakoc/english_corpus_uni5000_normalized" \
   --vocab_size=5000 \
   --tokenizer_type="unigram" \
