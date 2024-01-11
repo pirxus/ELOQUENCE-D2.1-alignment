@@ -4,6 +4,7 @@ import re
 from typing import Dict, List, Union
 
 import numpy as np
+import torch.distributed
 from datasets import (
     Audio,
     Dataset,
@@ -80,6 +81,51 @@ Audio manipulation functions.
 """
 
 
+class DistributedContext:
+    """Context manager for distributed training."""
+
+    def __init__(self):
+        """Initializes distributed context."""
+        self.local_rank = None
+        self.world_size = None
+
+    def __enter__(self):
+        """Initializes distributed context."""
+        if torch.distributed.is_available() and torch.distributed.is_initialized():
+            self.local_rank = torch.distributed.get_rank()
+            self.world_size = torch.distributed.get_world_size()
+        else:
+            self.local_rank = 0
+            self.world_size = 1
+        return self
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        """Performs barrier synchronization."""
+        if self.world_size > 1:
+            torch.distributed.barrier()
+
+    def wait_before(self):
+        if self.world_size > 1:
+            if self.local_rank > 0:
+                logger.info(f"Rank {self.local_rank}: Waiting for main process to perform the mapping")
+                torch.distributed.barrier()
+
+    def wait_after(self):
+        if self.world_size > 1:
+            if self.local_rank == 0:
+                logger.info(f"Rank {self.local_rank}: Waiting for other processes to finish")
+                torch.distributed.barrier()
+
+
+def distributed_process(dataset, process_by, **kwargs):
+    """Performs distributed processing of dataset."""
+    with DistributedContext() as context:
+        context.wait_before()
+        mapped_dataset = getattr(dataset, process_by)(**kwargs)
+        context.wait_after()
+    return mapped_dataset
+
+
 def audio_object_stripper(audio: Union[Dict, np.ndarray, List[float]], key="array"):
     """Strips audio object to numpy array."""
     audio_array = audio[key] if isinstance(audio, dict) and key in audio else audio
@@ -128,8 +174,10 @@ def prepare_dataset(
     # 1. Preprocess audio columns
     if length_column_name not in set().union(*dataset.column_names.values()) or "kaldi_dataset" in dataset_name:
         logger.info(f"Extracting audio lens.")
-        dataset = dataset.map(
-            extract_lens_batched,
+        dataset = distributed_process(
+            dataset,
+            process_by="map",
+            function=extract_lens_batched,
             num_proc=preprocessing_num_workers,
             input_columns=[audio_column_name],
             batched=True,
@@ -139,8 +187,10 @@ def prepare_dataset(
 
     if train_split is not None:
         logger.info(f"Filtering out too long and too short sequences from dataset.")
-        dataset[train_split] = dataset[train_split].filter(
-            filter_sequences_in_range_batched,
+        dataset[train_split] = distributed_process(
+            dataset[train_split],
+            process_by="filter",
+            function=filter_sequences_in_range_batched,
             batched=True,
             input_columns=[length_column_name],
             num_proc=preprocessing_num_workers,
@@ -180,8 +230,19 @@ def prepare_dataset(
     )
 
     logger.info("Casting audio column to Audio.")
-    dataset = dataset.cast_column(audio_column_name, Audio(sampling_rate=sampling_rate))
-    dataset = dataset.cast_column(length_column_name, Value(dtype="float32"))
+    dataset = distributed_process(
+        dataset,
+        process_by="cast_column",
+        column=audio_column_name,
+        feature=Audio(sampling_rate=sampling_rate),
+    )
+    dataset = distributed_process(
+        dataset,
+        process_by="cast_column",
+        column=length_column_name,
+        feature=Value(dtype="float32"),
+    )
+
     logger.info(str(dataset))
     return dataset
 
@@ -242,18 +303,21 @@ def load_multiple_datasets(
     dataset_merged = DatasetDict()
     for dataset_config in config_dict:
         logger.info(f"Loading dataset {dataset_config['dataset_name']}")
-        if dataset_config["load_from_disk"]:
-            dataset = load_from_disk(
-                dataset_config["dataset_name"], keep_in_memory=False, **dataset_config["additional_args"]
-            )
+        with DistributedContext() as context:
+            context.wait_before()
+            if dataset_config["load_from_disk"]:
+                dataset = load_from_disk(
+                    dataset_config["dataset_name"], keep_in_memory=False, **dataset_config["additional_args"]
+                )
 
-        else:
-            dataset = load_dataset(
-                dataset_config["dataset_name"],
-                keep_in_memory=False,
-                num_proc=num_proc,
-                **dataset_config["additional_args"],
-            )
+            else:
+                dataset = load_dataset(
+                    dataset_config["dataset_name"],
+                    keep_in_memory=False,
+                    num_proc=num_proc,
+                    **dataset_config["additional_args"],
+                )
+            context.wait_after()
         new_train_split_name = global_train_split if len(dataset_config["train_splits"]) > 0 else None
         new_dev_split_name = global_validation_split if len(dataset_config["dev_splits"]) > 0 else None
         dataset = merge_splits(dataset, dataset_config["train_splits"], new_train_split_name)
@@ -331,12 +395,15 @@ def get_dataset(
             global_validation_split=validation_split,
         )
     else:
-        if dataset_config is not None:
-            dataset = load_dataset(
-                dataset_name, dataset_config, keep_in_memory=False, num_proc=preprocessing_num_workers
-            )
-        else:
-            dataset = load_from_disk(dataset_name, keep_in_memory=False)
+        with DistributedContext() as context:
+            context.wait_before()
+            if dataset_config is not None:
+                dataset = load_dataset(
+                    dataset_name, dataset_config, keep_in_memory=False, num_proc=preprocessing_num_workers
+                )
+            else:
+                dataset = load_from_disk(dataset_name, keep_in_memory=False)
+            context.wait_after()
 
         # 3. Preprocess dataset
         dataset = prepare_dataset(
