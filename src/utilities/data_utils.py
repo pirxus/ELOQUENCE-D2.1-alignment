@@ -242,6 +242,8 @@ def prepare_dataset(
         dataset,
         process_by="cast_column",
         column=audio_column_name,
+        writer_batch_size=writer_batch_size,
+        num_proc=preprocessing_num_workers,
         feature=Audio(sampling_rate=sampling_rate),
     )
 
@@ -250,6 +252,8 @@ def prepare_dataset(
         dataset,
         process_by="cast_column",
         column=length_column_name,
+        writer_batch_size=writer_batch_size,
+        num_proc=preprocessing_num_workers,
         feature=Value(dtype="float32"),
     )
 

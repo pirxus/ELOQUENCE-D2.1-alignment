@@ -12,7 +12,7 @@ WORK_DIR="/mnt/proj1/open-28-58/lakoc/huggingface_asr"
 ENV_DIR="/mnt/proj1/open-28-58/lakoc/LoCo-ASR"
 RECIPE_DIR="${WORK_DIR}/recipes/ebranchformer_english"
 
-export HF_HOME="${ENV_DIR}/huggingface_cache"
+export HF_HOME="/scratch/project/open-28-57/lakoc/huggingface_cache"
 export PYTHONPATH="${PYTHONPATH}:${WORK_DIR}/src"
 export OMP_NUM_THREADS=64
 
@@ -30,7 +30,7 @@ python src/trainers/train_tokenizer.py \
   --length_column_name="input_len" \
   --preprocessing_num_workers="64" \
   --datasets_creation_config="${RECIPE_DIR}/datasets.json" \
-  --writer_batch_size="1000" \
+  --writer_batch_size="5000" \
   --tokenizer_name="Lakoc/english_corpus_uni5000_normalized" \
   --vocab_size=5000 \
   --tokenizer_type="unigram" \

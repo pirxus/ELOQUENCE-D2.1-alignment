@@ -12,7 +12,7 @@ WORK_DIR="/mnt/proj1/open-28-58/lakoc/huggingface_asr"
 ENV_DIR="/mnt/proj1/open-28-58/lakoc/LoCo-ASR"
 RECIPE_DIR="${WORK_DIR}/recipes/ebranchformer_english"
 
-export HF_HOME="${ENV_DIR}/huggingface_cache"
+export HF_HOME="/scratch/project/open-28-57/lakoc/huggingface_cache"
 export PYTHONPATH="${PYTHONPATH}:${WORK_DIR}/src"
 export OMP_NUM_THREADS=64
 
