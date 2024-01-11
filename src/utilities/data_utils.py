@@ -37,49 +37,6 @@ special_tokens = [
 
 tokens_escaped_regex = re.compile("|".join([r"\s" + re.escape(token) for token in special_tokens]))
 
-"""
-
-Text manipulation functions.
-
-"""
-
-
-def do_lower_case(example: str, label_column: str) -> Dict[str, str]:
-    """Lower cases batch."""
-    return {label_column: example.lower()}
-
-
-def remove_multiple_whitespaces_and_strip(example: str, label_column: str) -> Dict[str, str]:
-    """Removes multiple whitespaces from batch."""
-    return {label_column: re.sub(r"\s+", " ", example).strip()}
-
-
-def clean_special_tokens_english(example: str, label_column: str) -> Dict[str, str]:
-    """Cleans special tokens from labels."""
-    return {label_column: tokens_escaped_regex.sub("", example)}
-
-
-def transforms_unfinished_words_to_unks(example: str, label_column: str) -> Dict[str, str]:
-    """Transforms unfinished words to UNKs."""
-    return {label_column: re.sub(r"\(?\w+-\)?", "([unk])", example)}
-
-
-def filter_empty_transcriptions(example: str) -> bool:
-    """Filters out empty transcriptions."""
-    return example != ""
-
-
-def whisper_normalize_english(example: str, label_column: str) -> Dict[str, str]:
-    """Normalizes text using adapted whisper normalizer."""
-    return {label_column: whisper_normalizer(example)}
-
-
-"""
-
-Audio manipulation functions.
-
-"""
-
 
 class DistributedContext:
     """Context manager for distributed training."""
@@ -124,6 +81,50 @@ def distributed_process(dataset, process_by, **kwargs):
         mapped_dataset = getattr(dataset, process_by)(**kwargs)
         context.wait_after()
     return mapped_dataset
+
+
+"""
+
+Text manipulation functions.
+
+"""
+
+
+def do_lower_case(example: str, label_column: str) -> Dict[str, str]:
+    """Lower cases batch."""
+    return {label_column: example.lower()}
+
+
+def remove_multiple_whitespaces_and_strip(example: str, label_column: str) -> Dict[str, str]:
+    """Removes multiple whitespaces from batch."""
+    return {label_column: re.sub(r"\s+", " ", example).strip()}
+
+
+def clean_special_tokens_english(example: str, label_column: str) -> Dict[str, str]:
+    """Cleans special tokens from labels."""
+    return {label_column: tokens_escaped_regex.sub("", example)}
+
+
+def transforms_unfinished_words_to_unks(example: str, label_column: str) -> Dict[str, str]:
+    """Transforms unfinished words to UNKs."""
+    return {label_column: re.sub(r"\(?\w+-\)?", "([unk])", example)}
+
+
+def filter_empty_transcriptions(example: str) -> bool:
+    """Filters out empty transcriptions."""
+    return example != ""
+
+
+def whisper_normalize_english(example: str, label_column: str) -> Dict[str, str]:
+    """Normalizes text using adapted whisper normalizer."""
+    return {label_column: whisper_normalizer(example)}
+
+
+"""
+
+Audio manipulation functions.
+
+"""
 
 
 def audio_object_stripper(audio: Union[Dict, np.ndarray, List[float]], key="array"):
@@ -173,7 +174,6 @@ def prepare_dataset(
     """Preprocesses dataset."""
     # 1. Preprocess audio columns
     if length_column_name not in set().union(*dataset.column_names.values()) or "kaldi_dataset" in dataset_name:
-        logger.info(f"Extracting audio lens.")
         dataset = distributed_process(
             dataset,
             process_by="map",
@@ -183,10 +183,10 @@ def prepare_dataset(
             batched=True,
             writer_batch_size=writer_batch_size,
             fn_kwargs={"sampling_rate": sampling_rate, "len_column": length_column_name},
+            desc="Extracting audio lens",
         )
 
     if train_split is not None:
-        logger.info(f"Filtering out too long and too short sequences from dataset.")
         dataset[train_split] = distributed_process(
             dataset[train_split],
             process_by="filter",
@@ -196,51 +196,61 @@ def prepare_dataset(
             num_proc=preprocessing_num_workers,
             writer_batch_size=writer_batch_size,
             fn_kwargs={"max_input_len": max_input_len, "min_input_len": min_input_len},
+            desc="Filtering out too long and too short sequences",
         )
 
     # 2. Preprocess label columns
     for transformation_name in text_transformations:
-        logger.info(f"Applying {transformation_name} transformation to dataset.")
         if transformation_name.endswith("_train"):
             transformation = globals()[re.sub("_train", "", transformation_name)]
-            dataset[train_split] = dataset[train_split].map(
-                transformation,
+            dataset[train_split] = distributed_process(
+                dataset[train_split],
+                process_by="map",
+                function=transformation,
                 input_columns=[text_column_name],
                 num_proc=preprocessing_num_workers,
                 writer_batch_size=writer_batch_size,
                 fn_kwargs={"label_column": text_column_name},
+                desc=f"Applying {transformation_name} transformation",
             )
         else:
             transformation = globals()[transformation_name]
-            dataset = dataset.map(
-                transformation,
+            dataset = distributed_process(
+                dataset,
+                process_by="map",
+                function=transformation,
                 input_columns=[text_column_name],
                 num_proc=preprocessing_num_workers,
                 writer_batch_size=writer_batch_size,
                 fn_kwargs={"label_column": text_column_name},
+                desc=f"Applying {transformation_name} transformation",
             )
 
     # 3. Remove segments with empty annotations
-    logger.info(f"Filtering out empty transcriptions from dataset.")
-    dataset = dataset.filter(
-        filter_empty_transcriptions,
+    dataset = distributed_process(
+        dataset,
+        process_by="filter",
+        function=filter_empty_transcriptions,
         input_columns=[text_column_name],
         writer_batch_size=writer_batch_size,
         num_proc=preprocessing_num_workers,
+        desc="Filtering out empty transcriptions",
     )
 
-    logger.info("Casting audio column to Audio.")
     dataset = distributed_process(
         dataset,
         process_by="cast_column",
         column=audio_column_name,
         feature=Audio(sampling_rate=sampling_rate),
+        desc="Casting audio column to Audio",
     )
+
     dataset = distributed_process(
         dataset,
         process_by="cast_column",
         column=length_column_name,
         feature=Value(dtype="float32"),
+        desc="Casting length column to float32",
     )
 
     logger.info(str(dataset))
