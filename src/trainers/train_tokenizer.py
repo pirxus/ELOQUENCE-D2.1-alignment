@@ -121,18 +121,9 @@ if __name__ == "__main__":
         audio_column=data_args.audio_column_name,
         train_split=data_args.train_split,
         validation_split=data_args.validation_split,
-        unk_token=data_args.unk_token,
-        fix_apostrophes=data_args.fix_apostrophes,
-        remove_train_unks=data_args.remove_train_unks,
-        do_lower_case=data_args.do_lower_case,
-        remove_punctuation=data_args.remove_punctuation,
+        text_transformations=data_args.text_transformations,
     )
 
-    training_eval_dataset = (
-        dataset[data_args.validation_split].select(range(data_args.validation_slice))
-        if data_args.validation_slice
-        else dataset[data_args.validation_split]
-    )
     logger.info(f"Dataset processed successfully.{dataset}")
 
     if training_args.preprocess_dataset_only:
@@ -155,7 +146,7 @@ if __name__ == "__main__":
         text,
         tokenizer_args.bos_token,
         tokenizer_args.eos_token,
-        data_args.unk_token,
+        tokenizer_args.unk_token,
         tokenizer_args.pad_token,
         tokenizer_args.mask_token,
         tokenizer_args.vocab_size,

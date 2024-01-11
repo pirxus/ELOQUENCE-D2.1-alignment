@@ -52,6 +52,7 @@ class SpeechCollatorWithPadding:
     audio_path: str = None
     text_path: str = None
     model_input_name: str = True
+    mask_unks: bool = False
 
     def __call__(
         self, features: List[Dict[str, Union[List[int], torch.Tensor, Dict[str, BatchFeature]]]]
@@ -79,6 +80,10 @@ class SpeechCollatorWithPadding:
         )
 
         labels = labels["input_ids"].masked_fill(labels.attention_mask.ne(1), -100)
+
+        if self.mask_unks:
+            labels = labels.masked_fill(labels.eq(self.tokenizer.unk_token_id), -100)
+
         batch["labels"] = labels
 
         if self.model_input_name != self.feature_extractor.model_input_names[0]:

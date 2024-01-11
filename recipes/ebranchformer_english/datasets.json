@@ -16,11 +16,11 @@
     "text_column_name": "labels",
     "audio_column_name": "audio",
     "length_column_name": "input_len",
-    "fix_apostrophes": true,
-    "remove_train_unks": false,
-    "do_lower_case": true,
-    "remove_punctuation": true,
-    "unk_token": "<unk>",
+    "text_transformations": [
+      "whisper_normalize_english",
+      "clean_annotations_english_train",
+      "transforms_unfinished_words_to_unks_train"
+    ],
     "additional_args": {
       "data_dir": "/mnt/matylda5/ipoloka/projects/huggingface_asr/metadata_dirs/wsj",
       "splits": []
@@ -42,11 +42,11 @@
     "text_column_name": "labels",
     "audio_column_name": "audio",
     "length_column_name": "input_len",
-    "fix_apostrophes": true,
-    "remove_train_unks": false,
-    "do_lower_case": true,
-    "remove_punctuation": true,
-    "unk_token": "<unk>",
+    "text_transformations": [
+      "whisper_normalize_english",
+      "clean_annotations_english_train",
+      "transforms_unfinished_words_to_unks_train"
+    ],
     "additional_args": {
       "data_dir": "/mnt/matylda5/ipoloka/projects/huggingface_asr/metadata_dirs/fisher_swbd",
       "splits": []
@@ -68,11 +68,11 @@
     "text_column_name": "normalized_text",
     "audio_column_name": "audio",
     "length_column_name": "input_len",
-    "fix_apostrophes": true,
-    "remove_train_unks": false,
-    "do_lower_case": true,
-    "remove_punctuation": true,
-    "unk_token": "<unk>",
+    "text_transformations": [
+      "whisper_normalize_english",
+      "clean_annotations_english_train",
+      "transforms_unfinished_words_to_unks_train"
+    ],
     "additional_args": {
       "name": "en"
     }
@@ -93,11 +93,11 @@
     "text_column_name": "text",
     "audio_column_name": "audio",
     "length_column_name": "input_len",
-    "fix_apostrophes": true,
-    "remove_train_unks": false,
-    "do_lower_case": true,
-    "remove_punctuation": false,
-    "unk_token": "<unk>",
+    "text_transformations": [
+      "whisper_normalize_english",
+      "clean_annotations_english_train",
+      "transforms_unfinished_words_to_unks_train"
+    ],
     "additional_args": {
       "name": "release3"
     }
@@ -122,11 +122,11 @@
     "text_column_name": "text",
     "audio_column_name": "audio",
     "length_column_name": "input_len",
-    "fix_apostrophes": true,
-    "remove_train_unks": false,
-    "do_lower_case": true,
-    "remove_punctuation": true,
-    "unk_token": "<unk>",
+    "text_transformations": [
+      "whisper_normalize_english",
+      "clean_annotations_english_train",
+      "transforms_unfinished_words_to_unks_train"
+    ],
     "additional_args": {
       "name": "all"
     }
@@ -147,11 +147,11 @@
     "text_column_name": "sentence",
     "audio_column_name": "audio",
     "length_column_name": "input_len",
-    "fix_apostrophes": true,
-    "remove_train_unks": false,
-    "do_lower_case": true,
-    "remove_punctuation": true,
-    "unk_token": "<unk>",
+    "text_transformations": [
+      "whisper_normalize_english",
+      "clean_annotations_english_train",
+      "transforms_unfinished_words_to_unks_train"
+    ],
     "additional_args": {
       "name": "en"
     }
@@ -171,11 +171,11 @@
     "text_column_name": "transcription",
     "audio_column_name": "audio",
     "length_column_name": "input_len",
-    "fix_apostrophes": true,
-    "remove_train_unks": false,
-    "do_lower_case": true,
-    "remove_punctuation": true,
-    "unk_token": "<unk>",
+    "text_transformations": [
+      "whisper_normalize_english",
+      "clean_annotations_english_train",
+      "transforms_unfinished_words_to_unks_train"
+    ],
     "additional_args": {
       "name": "en_us"
     }

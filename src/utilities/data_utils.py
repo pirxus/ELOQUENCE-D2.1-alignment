@@ -1,7 +1,6 @@
 """Utilities for data loading and preprocessing."""
 import json
 import re
-import string
 from typing import Dict, List, Union
 
 import numpy as np
@@ -16,9 +15,69 @@ from datasets import (
 )
 from transformers.utils import logging
 
+from utilities.english_normalizer import EnglishNormalizer
+
 logger = logging.get_logger("transformers")
 
-tedlium_contractions = [" 's", " 't", " 're", " 've", " 'm", " 'll", " 'd", " 'clock", " 'all"]
+whisper_normalizer = EnglishNormalizer()
+special_tokens = [
+    "([noise])",
+    "([laughter])",
+    "([vocalized noise])",
+    "([hesitation])",
+    "([breath])",
+    "([cough])",
+    "([silence])",
+    "([noise])",
+    "([pause])",
+    "([skip])",
+    "([sneeze])",
+]
+
+tokens_escaped_regex = re.compile("|".join([r"\s" + re.escape(token) for token in special_tokens]))
+
+"""
+
+Text manipulation functions.
+
+"""
+
+
+def do_lower_case(example: str, label_column: str) -> Dict[str, str]:
+    """Lower cases batch."""
+    return {label_column: example.lower()}
+
+
+def remove_multiple_whitespaces_and_strip(example: str, label_column: str) -> Dict[str, str]:
+    """Removes multiple whitespaces from batch."""
+    return {label_column: re.sub(r"\s+", " ", example).strip()}
+
+
+def clean_special_tokens_english(example: str, label_column: str) -> Dict[str, str]:
+    """Cleans special tokens from labels."""
+    return {label_column: tokens_escaped_regex.sub("", example)}
+
+
+def transforms_unfinished_words_to_unks(example: str, label_column: str) -> Dict[str, str]:
+    """Transforms unfinished words to UNKs."""
+    return {label_column: re.sub(r"\(?\w+-\)?", "([unk])", example)}
+
+
+def filter_empty_transcriptions(example: str) -> bool:
+    """Filters out empty transcriptions."""
+    return example != ""
+
+
+def whisper_normalize_english(example: str, label_column: str) -> Dict[str, str]:
+    """Normalizes text using adapted whisper normalizer."""
+    return {label_column: whisper_normalizer(example)}
+
+
+"""
+
+Audio manipulation functions.
+
+"""
 
 
 def audio_object_stripper(audio: Union[Dict, np.ndarray, List[float]], key="array"):
@@ -41,48 +100,6 @@ def extract_lens_batched(audios: List[List[float]], len_column: str, sampling_ra
     return batch
 
 
-def filter_wrongly_annotated_segments_batched(batch: List[str]) -> List[bool]:
-    """Filters out segments which are wrongly annotated."""
-    return list(map(lambda x: x != "ignore_time_segment_in_scoring", batch))
-
-
-def remove_unks_batched(batch: List[str], unk_token: str, label_column: str) -> Dict[str, List[str]]:
-    """Removes UNK tokens from dataset."""
-    return {label_column: [sequence.replace(unk_token, "") for sequence in batch]}
-
-
-def replace_contractions(text: str) -> str:
-    """Replaces contractions in text."""
-    for contraction in tedlium_contractions:
-        text = text.replace(contraction, contraction[1:])
-    return text
-
-
-def fix_apostrophes_batched(batch: List[str], label_column: str) -> Dict[str, List[str]]:
-    """Fixes apostrophes in dataset."""
-    return {label_column: [replace_contractions(sequence).replace(r"\s+ '", r" '") for sequence in batch]}
-
-
-def filter_empty_transcriptions(batch: List[str]) -> List[bool]:
-    """Filters out empty transcriptions."""
-    return [example != "" for example in batch]
-
-
-def preprocess_cv_labels(batch: List[str], label_column: str) -> Dict[str, List[str]]:
-    """Preprocesses labels for commonvoice dataset."""
-    processed = []
-    for transcription in batch:
-        if transcription.startswith('"') and transcription.endswith('"'):
-            # we can remove trailing quotation marks as they do not affect the transcription
-            transcription = transcription[1:-1]
-
-        transcription = transcription.replace(r"[,.?!:;]", "")
-        transcription = transcription.replace('""', '"')
-        processed.append(transcription)
-
-    return {label_column: processed}
-
-
 def filter_out_sequence_from_dataset(
     dataset: Dataset, max_input_len: float = 5.0, min_input_len: float = 0.1, length_column="input_len"
 ) -> Dataset:
@@ -91,21 +108,6 @@ def filter_out_sequence_from_dataset(
     indexes_ok = np.argwhere(np.logical_and(lengths <= max_input_len, lengths >= min_input_len))
     dataset = dataset.select(indexes_ok.flatten())
     return dataset
-
-
-def do_lower_case_batched(batch: List[str], label_column: str) -> Dict[str, List[str]]:
-    """Lower cases batch."""
-    return {label_column: [example.lower() for example in batch]}
-
-
-def remove_punctuation_batched(batch: List[str], label_column: str) -> Dict[str, List[str]]:
-    """Removes punctuation from batch."""
-    return {label_column: [example.translate(str.maketrans("", "", string.punctuation)) for example in batch]}
-
-
-def remove_multiple_whitespaces_and_strip_batched(batch: List[str], label_column: str) -> Dict[str, List[str]]:
-    """Removes multiple whitespaces from batch."""
-    return {label_column: [re.sub(r"\s+", " ", example).strip() for example in batch]}
 
 
 def prepare_dataset(
@@ -117,16 +119,13 @@ def prepare_dataset(
     preprocessing_num_workers: int,
     writer_batch_size: int,
     train_split: str,
-    fix_apostrophes: bool,
-    remove_train_unks: bool,
-    do_lower_case: bool,
-    remove_punctuation: bool,
-    unk_token: str,
+    text_transformations: List[str],
     sampling_rate: int,
     max_input_len: float,
     min_input_len: float,
 ) -> DatasetDict:
     """Preprocesses dataset."""
+    # 1. Preprocess audio columns
     if length_column_name not in set().union(*dataset.column_names.values()) or "kaldi_dataset" in dataset_name:
         logger.info(f"Extracting audio lens.")
         dataset = dataset.map(
@@ -149,85 +148,35 @@ def prepare_dataset(
             fn_kwargs={"max_input_len": max_input_len, "min_input_len": min_input_len},
         )
 
-    if do_lower_case:
-        logger.info(f"Lower casing dataset.")
-        dataset = dataset.map(
-            do_lower_case_batched,
-            input_columns=[text_column_name],
-            batched=True,
-            num_proc=preprocessing_num_workers,
-            writer_batch_size=writer_batch_size,
-            fn_kwargs={"label_column": text_column_name},
-        )
+    # 2. Preprocess label columns
+    for transformation_name in text_transformations:
+        logger.info(f"Applying {transformation_name} transformation to dataset.")
+        if transformation_name.endswith("_train"):
+            transformation = globals()[re.sub("_train", "", transformation_name)]
+            dataset[train_split] = dataset[train_split].map(
+                transformation,
+                input_columns=[text_column_name],
+                num_proc=preprocessing_num_workers,
+                writer_batch_size=writer_batch_size,
+                fn_kwargs={"label_column": text_column_name},
+            )
+        else:
+            transformation = globals()[transformation_name]
+            dataset = dataset.map(
+                transformation,
+                input_columns=[text_column_name],
+                num_proc=preprocessing_num_workers,
+                writer_batch_size=writer_batch_size,
+                fn_kwargs={"label_column": text_column_name},
+            )
 
-    if remove_punctuation:
-        logger.info(f"Removing punctuation from dataset.")
-        dataset = dataset.map(
-            remove_punctuation_batched,
-            input_columns=[text_column_name],
-            batched=True,
-            num_proc=preprocessing_num_workers,
-            writer_batch_size=writer_batch_size,
-            fn_kwargs={"label_column": text_column_name},
-        )
-
-    logger.info(f"Filtering unlabeled data from dataset.")
-    dataset = dataset.filter(
-        filter_wrongly_annotated_segments_batched,
-        batched=True,
-        input_columns=[text_column_name],
-        writer_batch_size=writer_batch_size,
-        num_proc=preprocessing_num_workers,
-    )
+    # 3. Remove segments with empty annotations
+    logger.info(f"Filtering out empty transcriptions from dataset.")
     dataset = dataset.filter(
         filter_empty_transcriptions,
         input_columns=[text_column_name],
-        batched=True,
         writer_batch_size=writer_batch_size,
         num_proc=preprocessing_num_workers,
-    )
-
-    if train_split is not None and remove_train_unks:
-        logger.info(f"Removing UNKs from training data.")
-        dataset[train_split] = dataset[train_split].map(
-            remove_unks_batched,
-            batched=True,
-            input_columns=[text_column_name],
-            num_proc=preprocessing_num_workers,
-            writer_batch_size=writer_batch_size,
-            fn_kwargs={"unk_token": unk_token, "label_column": text_column_name},
-        )
-
-    if fix_apostrophes:
-        logger.info(f"Fixing apostrophes in dataset.")
-        dataset = dataset.map(
-            fix_apostrophes_batched,
-            input_columns=[text_column_name],
-            batched=True,
-            num_proc=preprocessing_num_workers,
-            writer_batch_size=writer_batch_size,
-            fn_kwargs={"label_column": text_column_name},
-        )
-
-    if dataset_name == "mozilla-foundation/common_voice_13_0":
-        logger.info(f"Fixing labels for commonvoice.")
-        dataset = dataset.map(
-            preprocess_cv_labels,
-            input_columns=[text_column_name],
-            batched=True,
-            writer_batch_size=writer_batch_size,
-            num_proc=preprocessing_num_workers,
-            fn_kwargs={"label_column": text_column_name},
-        )
-
-    logger.info("Striping and removing multiple spaces.")
-    dataset = dataset.map(
-        remove_multiple_whitespaces_and_strip_batched,
-        input_columns=[text_column_name],
-        batched=True,
-        num_proc=preprocessing_num_workers,
-        writer_batch_size=writer_batch_size,
-        fn_kwargs={"label_column": text_column_name},
     )
 
     logger.info("Casting audio column to Audio.")
@@ -320,14 +269,10 @@ def load_multiple_datasets(
             preprocessing_num_workers=num_proc,
             writer_batch_size=writer_batch_size,
             train_split=new_train_split_name,
-            fix_apostrophes=dataset_config["fix_apostrophes"],
-            remove_train_unks=dataset_config["remove_train_unks"],
-            unk_token=dataset_config["unk_token"],
+            text_transformations=dataset_config["text_transformations"],
             sampling_rate=sampling_rate,
             max_input_len=max_input_len,
             min_input_len=min_input_len,
-            do_lower_case=dataset_config["do_lower_case"],
-            remove_punctuation=dataset_config["remove_punctuation"],
         )
         dataset_renamed = dataset_processed.rename_columns(
             {
@@ -368,11 +313,7 @@ def get_dataset(
     audio_column: str,
     train_split: str,
     validation_split: str,
-    unk_token: str,
-    fix_apostrophes: bool,
-    remove_train_unks: bool,
-    do_lower_case: bool,
-    remove_punctuation: bool,
+    text_transformations: List[str],
 ) -> DatasetDict:
     """Loads single or multiple datasets, preprocess, and merge them."""
     if datasets_creation_config_path is not None:
@@ -407,13 +348,9 @@ def get_dataset(
             preprocessing_num_workers=preprocessing_num_workers,
             writer_batch_size=writer_batch_size,
             train_split=train_split,
-            fix_apostrophes=fix_apostrophes,
-            remove_train_unks=remove_train_unks,
-            unk_token=unk_token,
             sampling_rate=sampling_rate,
             max_input_len=max_input_len,
             min_input_len=min_input_len,
-            do_lower_case=do_lower_case,
-            remove_punctuation=remove_punctuation,
+            text_transformations=text_transformations,
         )
     return dataset

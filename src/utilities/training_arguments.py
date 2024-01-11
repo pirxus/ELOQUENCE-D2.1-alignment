@@ -72,6 +72,9 @@ class GeneralTrainingArguments(Seq2SeqTrainingArguments):
     joint_decoding_during_training: Optional[bool] = field(
         default=False, metadata={"help": "Whether to use joint decoding during training."}
     )
+    mask_unks: Optional[bool] = field(
+        default=False, metadata={"help": "Whether to mask unknown tokens for cross entropy."}
+    )
 
 
 @dataclass
@@ -134,17 +137,9 @@ class DataTrainingArguments:
         default=1, metadata={"help": "Number of processes to use for data preprocessing."}
     )
     writer_batch_size: Optional[int] = field(default=500, metadata={"help": "Batch size to use for writing to disk."})
-    remove_train_unks: Optional[bool] = field(
-        default=False, metadata={"help": "Whether to remove UNKs from training data."}
+    text_transformations: Optional[List[str]] = field(
+        default=None, metadata={"help": "List of transformations to apply to the text. "}
     )
-    fix_apostrophes: Optional[bool] = field(
-        default=False, metadata={"help": "Whether to remove trailing spaces from labels."}
-    )
-    do_lower_case: Optional[bool] = field(default=False, metadata={"help": "Whether to lowercase labels."})
-    remove_punctuation: Optional[bool] = field(
-        default=False, metadata={"help": "Whether to remove punctuation from labels."}
-    )
-    unk_token: Optional[str] = field(default="<unk>", metadata={"help": "UNK token"})
 
     """Arguments defining structure of the dataset"""
     audio_column_name: Optional[str] = field(
@@ -201,3 +196,4 @@ class TokenizerTrainingArguments:
     mask_token: Optional[str] = field(default="<mask>", metadata={"help": "MASK token"})
     bos_token: Optional[str] = field(default="<s>", metadata={"help": "BOS token"})
     eos_token: Optional[str] = field(default="</s>", metadata={"help": "EOS token"})
+    unk_token: Optional[str] = field(default="<unk>", metadata={"help": "UNK token"})
