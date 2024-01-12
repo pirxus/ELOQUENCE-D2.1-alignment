@@ -54,7 +54,7 @@ args=(
 
   # Data related arguments
   --max_duration_in_seconds="20.0"
-  --min_duration_in_seconds="0.0"
+  --min_duration_in_seconds="0.2"
   --length_column_name="input_len"
   --remove_unused_columns="False"
   --preprocessing_num_workers="32"
