@@ -2,20 +2,31 @@
 #SBATCH --job-name TED
 #SBATCH --account OPEN-28-57
 #SBATCH --partition qgpu
-#SBATCH --nodes=2
-#SBATCH --ntasks=2
-#SBATCH --ntasks-per-node=1
-#SBATCH --gpus=16
-#SBATCH --cpus-per-task=128
-#SBATCH --time 2-00:00:00
-#SBATCH --output=/mnt/proj1/open-28-58/lakoc/huggingface_asr/outputs/ebranchformer_english_medium_regularized_normalized.out
+#SBATCH --nodes=1
+#SBATCH --gpus=1
+#SBATCH --time 10:00:00
+#SBATCH --output=/mnt/proj1/open-28-58/lakoc/huggingface_asr/outputs/preprocess_english.out
 
-EXPERIMENT="ebranchformer_english_medium_regularized_normalized"
+EXPERIMENT="preprocess_english"
 PROJECT="regularizations_english_corpus"
 WORK_DIR="/mnt/proj1/open-28-58/lakoc/huggingface_asr"
 RECIPE_DIR="${WORK_DIR}/recipes/ebranchformer_english"
 EXPERIMENT_PATH="${WORK_DIR}/experiments/${EXPERIMENT}"
 HF_HOME="/scratch/project/open-28-57/lakoc/huggingface_cache"
+
+
+export HF_HOME="/scratch/project/open-28-57/lakoc/huggingface_cache"
+export PYTHONPATH="${PYTHONPATH}:${WORK_DIR}/src"
+export OMP_NUM_THREADS=64
+export WANDB_PROJECT=$PROJECT
+export WANDB_RUN_ID="${EXPERIMENT}_restart_proper"
+
+conda deactivate
+source activate loco_asr
+
+EXPERIMENT_PATH="${WORK_DIR}/experiments/${EXPERIMENT}"
+
+cd $WORK_DIR
 
 args=(
   # General training arguments
@@ -43,7 +54,7 @@ args=(
   --gradient_accumulation_steps="1"
 
   # Logging, saving and evaluation related arguments
-  --report_to="wandb"
+  --report_to="none"
   --logging_steps="10"
   --save_strategy="epoch"
   --evaluation_strategy="epoch"
@@ -54,7 +65,7 @@ args=(
 
   # Data related arguments
   --max_duration_in_seconds="20.0"
-  --min_duration_in_seconds="0.0"
+  --min_duration_in_seconds="0.2"
   --length_column_name="input_len"
   --remove_unused_columns="False"
   --preprocessing_num_workers="32"
@@ -82,17 +93,4 @@ args=(
   --decoding_ctc_weight="0.3"
 )
 
-export PARENT=`/bin/hostname -s`
-export MPORT=13000
-export CHILDREN=`scontrol show hostnames $SLURM_JOB_NODELIST | grep -v $PARENT`
-export HOSTLIST="$PARENT $CHILDREN"
-export WORLD_SIZE=$SLURM_NTASKS
-
-conda deactivate
-source activate loco_asr
-
-mkdir -p $EXPERIMENT_PATH
-
-srun --cpus-per-task $SLURM_CPUS_ON_NODE --gpus-per-task $SLURM_GPUS_ON_NODE  \
-/mnt/proj1/open-28-58/lakoc/huggingface_asr/recipes/multinode_training/start_single_node_job.sh \
-$EXPERIMENT $PROJECT $WORK_DIR $RECIPE_DIR $HF_HOME "${args[@]}"
+python src/trainers/train_enc_dec_asr.py "${args[@]}" --preprocess_dataset_only
