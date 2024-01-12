@@ -12,17 +12,14 @@ export OMP_NUM_THREADS=64
 export WANDB_PROJECT=$PROJECT
 export WANDB_RUN_ID="${EXPERIMENT}"
 
-conda deactivate
-source activate loco_asr
-
 EXPERIMENT_PATH="${WORK_DIR}/experiments/${EXPERIMENT}"
 
 cd $WORK_DIR
 
 torchrun \
-  --nproc_per_node=$NPROC_PER_NODE \
+  --nproc_per_node=$SLURM_GPUS_PER_TASK \
   --nnodes=$SLURM_JOB_NUM_NODES \
   --node_rank=$SLURM_PROCID \
   --master_addr="$PARENT" \
    --master_port="$MPORT" \
-   src/trainers/train_enc_dec_asr.py "${args[@]}" &>"${EXPERIMENT_PATH}/output_${SLURM_PROCID}.log"
+   src/trainers/train_enc_dec_asr.py "${args[@]}"

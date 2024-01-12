@@ -88,6 +88,9 @@ export CHILDREN=`scontrol show hostnames $SLURM_JOB_NODELIST | grep -v $PARENT`
 export HOSTLIST="$PARENT $CHILDREN"
 export WORLD_SIZE=$SLURM_NTASKS
 
+conda deactivate
+source activate loco_asr
+
 mkdir -p $EXPERIMENT_PATH
 
 srun --cpus-per-task $SLURM_CPUS_ON_NODE --gpus-per-task $SLURM_GPUS_ON_NODE  \
