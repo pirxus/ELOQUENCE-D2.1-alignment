@@ -2,15 +2,15 @@
 #SBATCH --job-name TED
 #SBATCH --account OPEN-28-57
 #SBATCH --partition qgpu
-#SBATCH --nodes=2                          # number of nodes
-#SBATCH --ntasks=1                         # number of tasks
-#SBATCH --ntasks-per-node=1                # number of tasks per node
-#SBATCH --gpus-per-task=1                  # number of gpu per task
-#SBATCH --cpus-per-task=16                 # number of cores per task
-#SBATCH --time 1:00:00
+#SBATCH --nodes=2
+#SBATCH --ntasks=2
+#SBATCH --ntasks-per-node=1
+#SBATCH --gpus=16
+#SBATCH --cpus-per-task=128
+#SBATCH --time 2-00:00:00
 #SBATCH --output=/mnt/proj1/open-28-58/lakoc/huggingface_asr/outputs/ebranchformer_english_medium_regularized_normalized.out
 
-EXPERIMENT="multinode_test"
+EXPERIMENT="ebranchformer_english_medium_regularized_normalized"
 PROJECT="regularizations_english_corpus"
 WORK_DIR="/mnt/proj1/open-28-58/lakoc/huggingface_asr"
 RECIPE_DIR="${WORK_DIR}/recipes/ebranchformer_english"
@@ -40,6 +40,7 @@ args=(
   --weight_decay="1e-6"
   --max_grad_norm="0.5"
   --lsm_factor="0.1"
+  --mask_unks
   --gradient_accumulation_steps="1"
 
   # Logging, saving and evaluation related arguments
@@ -88,6 +89,8 @@ export MPORT=13000
 export CHILDREN=`scontrol show hostnames $SLURM_JOB_NODELIST | grep -v $PARENT`
 export HOSTLIST="$PARENT $CHILDREN"
 export WORLD_SIZE=$SLURM_NTASKS
+
+mkdir -p $EXPERIMENT_PATH
 
 srun --cpus-per-task $NCPU_PER_NODE --gpus-per-task $NPROC_PER_NODE  \
 /mnt/proj1/open-28-58/lakoc/huggingface_asr/recipes/multinode_training/start_single_node_job.sh \
