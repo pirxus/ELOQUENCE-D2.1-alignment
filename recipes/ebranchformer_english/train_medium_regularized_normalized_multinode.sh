@@ -15,7 +15,6 @@ PROJECT="regularizations_english_corpus"
 WORK_DIR="/mnt/proj1/open-28-58/lakoc/huggingface_asr"
 RECIPE_DIR="${WORK_DIR}/recipes/ebranchformer_english"
 EXPERIMENT_PATH="${WORK_DIR}/experiments/${EXPERIMENT}"
-NCPU_PER_NODE=16
 HF_HOME="/scratch/project/open-28-57/lakoc/huggingface_cache"
 
 args=(
@@ -83,7 +82,6 @@ args=(
   --decoding_ctc_weight="0.3"
 )
 
-export NPROC_PER_NODE=1
 export PARENT=`/bin/hostname -s`
 export MPORT=13000
 export CHILDREN=`scontrol show hostnames $SLURM_JOB_NODELIST | grep -v $PARENT`
@@ -92,6 +90,6 @@ export WORLD_SIZE=$SLURM_NTASKS
 
 mkdir -p $EXPERIMENT_PATH
 
-srun --cpus-per-task $NCPU_PER_NODE --gpus-per-task $NPROC_PER_NODE  \
+srun --cpus-per-task $SLURM_CPUS_PER_TASK --gpus-per-task $SLURM_GPUS_PER_TASK  \
 /mnt/proj1/open-28-58/lakoc/huggingface_asr/recipes/multinode_training/start_single_node_job.sh \
 $EXPERIMENT $PROJECT $WORK_DIR $RECIPE_DIR $HF_HOME "${args[@]}"
