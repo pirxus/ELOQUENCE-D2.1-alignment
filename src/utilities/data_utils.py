@@ -331,6 +331,11 @@ def load_multiple_datasets(
         dataset = merge_splits(dataset, dataset_config["train_splits"], new_train_split_name)
         dataset = merge_splits(dataset, dataset_config["dev_splits"], new_dev_split_name)
 
+        # Remove unused splits
+        for split in list(dataset.keys()):
+            if split not in dataset_config["test_splits"] + [new_train_split_name, new_dev_split_name]:
+                del dataset[split]
+
         logger.info(f"Preprocessing dataset {dataset_config['dataset_name']}")
         dataset_processed = prepare_dataset(
             dataset=dataset,
