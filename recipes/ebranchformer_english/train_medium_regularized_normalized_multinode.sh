@@ -2,8 +2,11 @@
 #SBATCH --job-name TED
 #SBATCH --account OPEN-28-57
 #SBATCH --partition qgpu
-#SBATCH --gpus 1
-#SBATCH --nodes 2
+#SBATCH --nodes=2                          # number of nodes
+#SBATCH --ntasks=1                         # number of tasks
+#SBATCH --ntasks-per-node=1                # number of tasks per node
+#SBATCH --gpus-per-task=1                  # number of gpu per task
+#SBATCH --cpus-per-task=16                 # number of cores per task
 #SBATCH --time 1:00:00
 #SBATCH --output=/mnt/proj1/open-28-58/lakoc/huggingface_asr/outputs/ebranchformer_english_medium_regularized_normalized.out
 
@@ -12,7 +15,7 @@ PROJECT="regularizations_english_corpus"
 WORK_DIR="/mnt/proj1/open-28-58/lakoc/huggingface_asr"
 RECIPE_DIR="${WORK_DIR}/recipes/ebranchformer_english"
 EXPERIMENT_PATH="${WORK_DIR}/experiments/${EXPERIMENT}"
-NCPU_PER_NODE=128
+NCPU_PER_NODE=16
 HF_HOME="/scratch/project/open-28-57/lakoc/huggingface_cache"
 
 args=(
