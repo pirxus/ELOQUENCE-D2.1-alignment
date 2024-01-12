@@ -90,6 +90,6 @@ export WORLD_SIZE=$SLURM_NTASKS
 
 mkdir -p $EXPERIMENT_PATH
 
-srun --cpus-per-task $SLURM_CPUS_PER_TASK --gpus-per-task $SLURM_GPUS_PER_TASK  \
+srun --cpus-per-task $SLURM_CPUS_ON_NODE --gpus-per-task $SLURM_GPUS_ON_NODE  \
 /mnt/proj1/open-28-58/lakoc/huggingface_asr/recipes/multinode_training/start_single_node_job.sh \
 $EXPERIMENT $PROJECT $WORK_DIR $RECIPE_DIR $HF_HOME "${args[@]}"
