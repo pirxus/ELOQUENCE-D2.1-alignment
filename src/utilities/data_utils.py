@@ -202,17 +202,18 @@ def prepare_dataset(
     # 2. Preprocess label columns
     for transformation_name in text_transformations:
         if transformation_name.endswith("_train"):
-            transformation = globals()[re.sub("_train", "", transformation_name)]
-            dataset[train_split] = distributed_process(
-                dataset[train_split],
-                process_by="map",
-                function=transformation,
-                input_columns=[text_column_name],
-                num_proc=preprocessing_num_workers,
-                writer_batch_size=writer_batch_size,
-                fn_kwargs={"label_column": text_column_name},
-                desc=f"Applying {transformation_name} transformation",
-            )
+            if train_split is not None:
+                transformation = globals()[re.sub("_train", "", transformation_name)]
+                dataset[train_split] = distributed_process(
+                    dataset[train_split],
+                    process_by="map",
+                    function=transformation,
+                    input_columns=[text_column_name],
+                    num_proc=preprocessing_num_workers,
+                    writer_batch_size=writer_batch_size,
+                    fn_kwargs={"label_column": text_column_name},
+                    desc=f"Applying {transformation_name} transformation",
+                )
         else:
             transformation = globals()[transformation_name]
             dataset = distributed_process(
