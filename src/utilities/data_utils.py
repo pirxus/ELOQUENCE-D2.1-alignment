@@ -442,4 +442,10 @@ def get_dataset(
             min_input_len=min_input_len,
             text_transformations=text_transformations,
         )
+
+    # Filter too short samples from validation dataset
+    dataset[validation_split] = dataset[validation_split].filter(
+        lambda x: x > min_input_len, input_columns=[len_column]
+    )
+
     return dataset
