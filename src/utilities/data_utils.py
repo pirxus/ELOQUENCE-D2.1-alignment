@@ -35,6 +35,8 @@ special_tokens = [
     "([sneeze])",
 ]
 
+spec_tokens_mapping_gigaspeech = {"<COMMA>": ",", "<PERIOD>": ".", "<QUESTION_MARK>": "?", "<EXCLAMATION_MARK>": "!"}
+
 tokens_escaped_regex = re.compile("|".join([r"\s" + re.escape(token) for token in special_tokens]))
 
 
@@ -118,6 +120,13 @@ def filter_empty_transcriptions(example: str) -> bool:
 def whisper_normalize_english(example: str, label_column: str) -> Dict[str, str]:
     """Normalizes text using adapted whisper normalizer."""
     return {label_column: whisper_normalizer(example)}
+
+
+def map_gigaspeech_spec_tokens(example: str, label_column: str) -> Dict[str, str]:
+    """Maps special tokens from GigaSpeech to common ones."""
+    for token, replacement in spec_tokens_mapping_gigaspeech.items():
+        example = example.replace(token, replacement)
+    return {label_column: example}
 
 
 """
