@@ -444,8 +444,11 @@ def get_dataset(
         )
 
     # Filter too short samples from validation dataset
-    dataset[validation_split] = dataset[validation_split].filter(
-        lambda x: x > min_input_len, input_columns=[len_column]
-    )
+    with DistributedContext() as context:
+        context.wait_before()
+        dataset[validation_split] = dataset[validation_split].filter(
+            lambda x: x > min_input_len, input_columns=[len_column]
+        )
+        context.wait_after()
 
     return dataset
