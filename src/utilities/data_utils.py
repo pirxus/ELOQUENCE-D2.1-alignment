@@ -35,7 +35,7 @@ special_tokens = [
     "([sneeze])",
 ]
 
-spec_tokens_mapping_gigaspeech = {"<COMMA>": ",", "<PERIOD>": ".", "<QUESTION_MARK>": "?", "<EXCLAMATION_MARK>": "!"}
+spec_tokens_mapping_gigaspeech = {"<COMMA>": ",", "<PERIOD>": ".", "<QUESTIONMARK>": "?", "<EXCLAMATIONMARK>": "!"}
 
 tokens_escaped_regex = re.compile("|".join([r"\s" + re.escape(token) for token in special_tokens]))
 
