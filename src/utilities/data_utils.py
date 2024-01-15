@@ -149,6 +149,12 @@ def filter_sequences_in_range_batched(batch: List[int], max_input_len: int, min_
     return (arr <= max_input_len) & (arr >= min_input_len)
 
 
+def filter_zero_length_audio_batched(lens: List[List[float]]) -> List[bool]:
+    """Filters out sequences form dataset which are in bounds."""
+    arr = np.array(lens)
+    return arr != 0.0
+
+
 def extract_lens_batched(audios: List[List[float]], len_column: str, sampling_rate: int) -> Dict[str, List[float]]:
     """Extracts audio lens from dataset."""
     lens = [len(audio_object_stripper(example)) / sampling_rate for example in audios]
@@ -443,12 +449,19 @@ def get_dataset(
             text_transformations=text_transformations,
         )
 
-    # Filter too short samples from validation dataset
+    # Filter empty samples from validation and test splits
     with DistributedContext() as context:
         context.wait_before()
-        dataset[validation_split] = dataset[validation_split].filter(
-            lambda x: x > min_input_len, input_columns=[len_column]
-        )
+        dataset_splits = list(dataset.keys())
+        dataset_splits.remove(train_split)
+        for split in dataset_splits:
+            dataset[split] = dataset[split].filter(
+                filter_zero_length_audio_batched,
+                input_columns=[len_column],
+                batched=True,
+                writer_batch_size=writer_batch_size,
+                num_proc=preprocessing_num_workers,
+            )
         context.wait_after()
 
     return dataset
