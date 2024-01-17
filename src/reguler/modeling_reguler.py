@@ -35,37 +35,16 @@ from transformers.models.speech_encoder_decoder.modeling_speech_encoder_decoder 
 )
 from transformers.utils import logging
 
-from decoding.ctc_scorer import CTCPrefixScoreTH
-from models.auto_wrappers import CustomAutoModelForCTC
-from models.decoders.multi_head_gpt2 import GPT2LMMultiHeadModel, GPT2MultiHeadConfig
-from models.decoders.residual_clasiffier_gpt2 import (
-    GPT2ResidualsLMHeadConfig,
-    GPT2ResidualsLMHeadModel,
-)
-from models.encoders.e_branchformer import (
-    Wav2Vec2EBranchformerConfig,
-    Wav2Vec2EBranchformerForCTC,
-)
+from .auto_wrappers import CustomAutoModelForCTC
+from .configuration_reguler import JointCTCAttentionEncoderDecoderConfig
+from .ctc_scorer import CTCPrefixScoreTH
+from .multi_head_gpt2 import GPT2LMMultiHeadModel
 
 logger = logging.get_logger("transformers")
-
-AutoConfig.register("gpt2-multi-head", GPT2MultiHeadConfig)
-AutoModelForCausalLM.register(GPT2MultiHeadConfig, GPT2LMMultiHeadModel)
-
-AutoConfig.register("gpt2-residuals-head", GPT2ResidualsLMHeadConfig)
-AutoModelForCausalLM.register(GPT2ResidualsLMHeadConfig, GPT2ResidualsLMHeadModel)
-
-AutoConfig.register("wav2vec2-ebranchformer", Wav2Vec2EBranchformerConfig)
-CustomAutoModelForCTC.register(Wav2Vec2EBranchformerConfig, Wav2Vec2EBranchformerForCTC)
 
 
 def wav2vec2_forward_hidden_return_hook(_: PreTrainedModel, __: Any, kwargs):
     kwargs["output_hidden_states"] = True
-
-
-class JointCTCAttentionEncoderDecoderConfig(SpeechEncoderDecoderConfig):
-    model_type = "joint_aed_ctc_speech-encoder-decoder"
-    is_composition = True
 
 
 @dataclass
@@ -118,6 +97,7 @@ class JointCTCAttentionEncoderDecoder(SpeechEncoderDecoderModel):
             encoder = CustomAutoModelForCTC.from_config(config.encoder)
             encoder.register_forward_hook(wav2vec2_for_ctc_forward_hook)
             encoder.register_forward_pre_hook(wav2vec2_forward_hidden_return_hook, with_kwargs=True)
+
         if decoder is None:
             decoder = AutoModelForCausalLM.from_config(config.decoder)
 

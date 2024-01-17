@@ -7,7 +7,6 @@ import numpy as np
 import torch.distributed
 from datasets import (
     Audio,
-    Dataset,
     DatasetDict,
     Value,
     concatenate_datasets,
@@ -38,6 +37,8 @@ special_tokens = [
 spec_tokens_mapping_gigaspeech = {"<COMMA>": ",", "<PERIOD>": ".", "<QUESTIONMARK>": "?", "<EXCLAMATIONMARK>": "!"}
 
 tokens_escaped_regex = re.compile("|".join([r"\s" + re.escape(token) for token in special_tokens]))
+
+MIN_INPUT_LEN = 0.1
 
 
 class DistributedContext:
@@ -143,7 +144,7 @@ def audio_object_stripper(audio: Union[Dict, np.ndarray, List[float]], key="arra
     return trimmed
 
 
-def filter_sequences_in_range_batched(batch: List[int], max_input_len: int, min_input_len: int) -> List[bool]:
+def filter_sequences_in_range_batched(batch: List[float], max_input_len: float, min_input_len: float) -> List[bool]:
     """Filters out sequences form dataset which are in bounds."""
     arr = np.array(batch)
     return (arr <= max_input_len) & (arr >= min_input_len)
@@ -160,16 +161,6 @@ def extract_lens_batched(audios: List[List[float]], len_column: str, sampling_ra
     lens = [len(audio_object_stripper(example)) / sampling_rate for example in audios]
     batch = {len_column: lens}
     return batch
-
-
-def filter_out_sequence_from_dataset(
-    dataset: Dataset, max_input_len: float = 5.0, min_input_len: float = 0.1, length_column="input_len"
-) -> Dataset:
-    """Filters out sequences form dataset which are longer than provided threshold"""
-    lengths = np.array(dataset[length_column])
-    indexes_ok = np.argwhere(np.logical_and(lengths <= max_input_len, lengths >= min_input_len))
-    dataset = dataset.select(indexes_ok.flatten())
-    return dataset
 
 
 def prepare_dataset(
@@ -449,19 +440,21 @@ def get_dataset(
             text_transformations=text_transformations,
         )
 
-    # Filter empty samples from validation and test splits
-    with DistributedContext() as context:
-        context.wait_before()
-        dataset_splits = list(dataset.keys())
-        dataset_splits.remove(train_split)
-        for split in dataset_splits:
-            dataset[split] = dataset[split].filter(
-                filter_zero_length_audio_batched,
-                input_columns=[len_column],
-                batched=True,
-                writer_batch_size=writer_batch_size,
-                num_proc=preprocessing_num_workers,
-            )
-        context.wait_after()
+    # Filter samples shorter than 0.1s - {MIN_INPUT_LEN},
+    # due to the conv subsampling and mel fbank extraction in model encoder
+    dataset_splits = list(dataset.keys())
+    dataset_splits.remove(train_split)
+    for split in dataset_splits:
+        dataset[split] = distributed_process(
+            dataset[split],
+            process_by="filter",
+            function=filter_sequences_in_range_batched,
+            batched=True,
+            input_columns=[len_column],
+            num_proc=preprocessing_num_workers,
+            writer_batch_size=writer_batch_size,
+            fn_kwargs={"max_input_len": np.finfo(np.float32).max, "min_input_len": MIN_INPUT_LEN},
+            desc="Filter samples that the model is not able to process due to the conv subsampling.",
+        )
 
     return dataset
