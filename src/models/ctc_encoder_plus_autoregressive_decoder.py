@@ -42,6 +42,7 @@ from models.decoders.residual_clasiffier_gpt2 import (
     GPT2ResidualsLMHeadConfig,
     GPT2ResidualsLMHeadModel,
 )
+from models.embeddings import AdaptiveEmbedding, PositionalEmbedding
 from models.encoders.e_branchformer import (
     Wav2Vec2EBranchformerConfig,
     Wav2Vec2EBranchformerForCTC,
@@ -163,11 +164,6 @@ class JointCTCAttentionEncoderDecoder(SpeechEncoderDecoderModel):
         if (hasattr(config, "decoder_pos_emb_fixed") and config.decoder_pos_emb_fixed) or (
             hasattr(config.decoder, "pos_emb_fixed") and config.decoder.pos_emb_fixed
         ):
-            from transformers.models.transfo_xl.modeling_transfo_xl import (
-                AdaptiveEmbedding,
-                PositionalEmbedding,
-            )
-
             self.decoder.transformer.wte = AdaptiveEmbedding(
                 n_token=config.decoder.vocab_size,
                 d_embed=config.decoder.hidden_size,

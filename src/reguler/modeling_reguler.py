@@ -38,6 +38,7 @@ from transformers.utils import logging
 from .auto_wrappers import CustomAutoModelForCTC
 from .configuration_reguler import JointCTCAttentionEncoderDecoderConfig
 from .ctc_scorer import CTCPrefixScoreTH
+from .embeddings import AdaptiveEmbedding, PositionalEmbedding
 from .multi_head_gpt2 import GPT2LMMultiHeadModel
 
 logger = logging.get_logger("transformers")
@@ -143,11 +144,6 @@ class JointCTCAttentionEncoderDecoder(SpeechEncoderDecoderModel):
         if (hasattr(config, "decoder_pos_emb_fixed") and config.decoder_pos_emb_fixed) or (
             hasattr(config.decoder, "pos_emb_fixed") and config.decoder.pos_emb_fixed
         ):
-            from transformers.models.transfo_xl.modeling_transfo_xl import (
-                AdaptiveEmbedding,
-                PositionalEmbedding,
-            )
-
             self.decoder.transformer.wte = AdaptiveEmbedding(
                 n_token=config.decoder.vocab_size,
                 d_embed=config.decoder.hidden_size,
