@@ -2,10 +2,10 @@
 #SBATCH --job-name TED
 #SBATCH --account OPEN-28-57
 #SBATCH --partition qgpu
-#SBATCH --nodes=4
-#SBATCH --ntasks=4
+#SBATCH --nodes=6
+#SBATCH --ntasks=6
 #SBATCH --ntasks-per-node=1
-#SBATCH --gpus=32
+#SBATCH --gpus=48
 #SBATCH --cpus-per-task=128
 #SBATCH --time 2-00:00:00
 #SBATCH --output=/mnt/proj1/open-28-58/lakoc/huggingface_asr/outputs/ebranchformer_english_big_extended.out
@@ -20,10 +20,10 @@ HF_HOME="/scratch/project/open-28-57/lakoc/huggingface_cache"
 args=(
   # General training arguments
   --output_dir=$EXPERIMENT_PATH
-  --per_device_train_batch_size="24"
-  --per_device_eval_batch_size="8"
+  --per_device_train_batch_size="16"
+  --per_device_eval_batch_size="4"
   --dataloader_num_workers="24"
-  --num_train_epochs="400"
+  --num_train_epochs="100"
   --group_by_length="True"
   --bf16
   --do_train
@@ -35,8 +35,8 @@ args=(
   # Optimizer related arguments
   --optim="adamw_torch"
   --learning_rate="1e-3"
-  --warmup_steps="40000"
-  --early_stopping_patience="10"
+  --warmup_steps="20000"
+  --early_stopping_patience="5"
   --weight_decay="1e-6"
   --max_grad_norm="0.5"
   --lsm_factor="0.1"
@@ -48,7 +48,7 @@ args=(
   --logging_steps="10"
   --save_strategy="epoch"
   --evaluation_strategy="epoch"
-  --wandb_predictions_to_save=500
+  --wandb_predictions_to_save=1000
   --greater_is_better="False"
   --save_total_limit="5"
   --track_ctc_loss
