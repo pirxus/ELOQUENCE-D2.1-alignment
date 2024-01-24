@@ -1,0 +1,19 @@
+[
+    {
+    "dataset_name": "src/dataset_builders/audio_folder_vad",
+    "dataset_id": "RAND",
+    "load_from_disk": false,
+    "train_splits": [
+      "train"
+    ],
+    "dev_splits": [
+    ],
+    "test_splits": [
+    ],
+    "audio_column_name": "audio",
+    "length_column_name": "input_len",
+    "additional_args": {
+      "data_files": ["/Users/alexanderpolok/PycharmProjects/huggingface_asr/audios_here/*","/Users/alexanderpolok/PycharmProjects/huggingface_asr/audios_here/*"]
+    }
+  }
+]
