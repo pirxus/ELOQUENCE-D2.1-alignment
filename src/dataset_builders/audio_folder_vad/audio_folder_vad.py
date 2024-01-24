@@ -1,3 +1,4 @@
+"""AudioFolderVAD dataset."""
 from typing import List
 
 import datasets
@@ -17,7 +18,9 @@ class AudioFolderConfig(folder_based_builder.FolderBasedBuilderConfig):
     drop_metadata: bool = None
 
 
-class AudioFolder(folder_based_builder.FolderBasedBuilder):
+class AudioFolderVAD(folder_based_builder.FolderBasedBuilder):
+    """AudioFolderVAD dataset."""
+
     BASE_FEATURE = datasets.Audio
     BASE_COLUMN_NAME = "audio"
     BUILDER_CONFIG_CLASS = AudioFolderConfig
@@ -38,15 +41,17 @@ class AudioFolder(folder_based_builder.FolderBasedBuilder):
 
     def _generate_examples(self, files, metadata_files, split_name, add_metadata, add_labels):
         audio_encoder = datasets.Audio(sampling_rate=16000, mono=True)
-        for id, example in super()._generate_examples(files, metadata_files, split_name, add_metadata, add_labels):
+        for example_id, example in super()._generate_examples(
+            files, metadata_files, split_name, add_metadata, add_labels
+        ):
             # pylint: disable=no-member
             waveform, sample_rate = torchaudio.load(example["audio"])
 
             annotation = self.vad_pipeline({"waveform": waveform, "sample_rate": sample_rate})
 
             for segment in annotation.itersegments():
-                chunk = waveform[:, int(segment.start * sample_rate) : int(segment.end * sample_rate)].numpy()
-                yield f"{id}_{segment.start:.2f}_{segment.end:.2f}", {
+                chunk = waveform[:, int(segment.start * sample_rate) : int(segment.end * sample_rate)].squeeze().numpy()
+                yield f"{example_id}_{segment.start:.2f}_{segment.end:.2f}", {
                     **example,
                     "audio": audio_encoder.encode_example({"array": chunk, "sampling_rate": sample_rate}),
                 }
@@ -93,4 +98,4 @@ AUDIO_EXTENSIONS = [
     ".mp3",
     ".opus",
 ]
-AudioFolder.EXTENSIONS = AUDIO_EXTENSIONS
+AudioFolderVAD.EXTENSIONS = AUDIO_EXTENSIONS
