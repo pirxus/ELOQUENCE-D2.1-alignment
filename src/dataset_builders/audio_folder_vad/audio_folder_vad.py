@@ -2,6 +2,7 @@
 from typing import List
 
 import datasets
+import torch
 import torchaudio
 from datasets.packaged_modules.folder_based_builder import folder_based_builder
 from datasets.tasks import AudioClassification
@@ -29,15 +30,18 @@ class AudioFolderVAD(folder_based_builder.FolderBasedBuilder):
     EXTENSIONS: List[str]  # definition at the bottom of the script
     CLASSIFICATION_TASK = AudioClassification(audio_column="audio", label_column="label")
 
-    def __init__(self, *args, **kwargs):
+    def __init__(
+        self, vad_model, vad_device, vad_batch_size, vad_min_duration_on, vad_min_duration_off, *args, **kwargs
+    ):
         super().__init__(*args, **kwargs)
-        model = Model.from_pretrained("pyannote/segmentation-3.0", use_auth_token=kwargs.get("use_auth_token", None))
-        self.vad_pipeline = VoiceActivityDetection(segmentation=model)
+        device = torch.device(vad_device)
+        model = Model.from_pretrained(vad_model, use_auth_token=kwargs.get("use_auth_token", None))
+        self.vad_pipeline = VoiceActivityDetection(segmentation=model, batch_size=vad_batch_size, device=device)
         HYPER_PARAMETERS = {
             # remove speech regions shorter than that many seconds.
-            "min_duration_on": 2.0,
+            "min_duration_on": vad_min_duration_on,
             # fill non-speech regions shorter than that many seconds.
-            "min_duration_off": 1.0,
+            "min_duration_off": vad_min_duration_off,
         }
         self.vad_pipeline.instantiate(HYPER_PARAMETERS)
 
