@@ -166,6 +166,9 @@ class DataTrainingArguments:
     split_long_segments_to_chunks: Optional[bool] = field(
         default=False, metadata={"help": "Whether to split long segments to chunks."}
     )
+    filter_empty_labels: Optional[bool] = field(
+        default=False, metadata={"help": "Whether to filter out samples with empty labels."}
+    )
 
 
 @dataclass

@@ -150,7 +150,7 @@ def split_long_segments_to_chunks_fun(
     audio_column: str,
     length_column_name: str,
     max_input_len: float,
-    sampling_rate: float,
+    sampling_rate: int,
 ) -> Dict[str, List[List[float]]]:
     audio_encoder = Audio(sampling_rate=sampling_rate, mono=True)
     chunks = []
@@ -193,6 +193,7 @@ def prepare_dataset(
     train_split: str,
     text_transformations: List[str],
     split_long_segments_to_chunks: bool,
+    filter_empty_labels: bool,
     sampling_rate: int,
     max_input_len: float,
     min_input_len: float,
@@ -278,15 +279,16 @@ def prepare_dataset(
                 )
 
         # 3. Remove segments with empty annotations
-        dataset = distributed_process(
-            dataset,
-            process_by="filter",
-            function=filter_empty_transcriptions,
-            input_columns=[text_column_name],
-            writer_batch_size=writer_batch_size,
-            num_proc=preprocessing_num_workers,
-            desc="Filtering out empty transcriptions",
-        )
+        if filter_empty_labels:
+            dataset = distributed_process(
+                dataset,
+                process_by="filter",
+                function=filter_empty_transcriptions,
+                input_columns=[text_column_name],
+                writer_batch_size=writer_batch_size,
+                num_proc=preprocessing_num_workers,
+                desc="Filtering out empty transcriptions",
+            )
 
     logger.info("Casting audio column to Audio, and length column to float32")
     feature_types = dataset[list(dataset.keys())[0]].features
@@ -357,6 +359,7 @@ def load_multiple_datasets(
     global_train_split: str,
     global_validation_split: str,
     split_long_segments_to_chunks: bool,
+    filter_empty_labels: bool,
 ) -> DatasetDict:
     """Loads multiple datasets, preprocess them and join to single dataset instance."""
     with open(config_path) as config_handle:
@@ -407,6 +410,7 @@ def load_multiple_datasets(
             max_input_len=max_input_len,
             min_input_len=min_input_len,
             split_long_segments_to_chunks=split_long_segments_to_chunks,
+            filter_empty_labels=filter_empty_labels,
         )
 
         for column, global_column in [
@@ -451,6 +455,7 @@ def get_dataset(
     validation_split: str,
     text_transformations: List[str],
     split_long_segments_to_chunks: bool,
+    filter_empty_labels: bool,
 ) -> DatasetDict:
     """Loads single or multiple datasets, preprocess, and merge them."""
     if datasets_creation_config_path is not None:
@@ -467,6 +472,7 @@ def get_dataset(
             global_train_split=train_split,
             global_validation_split=validation_split,
             split_long_segments_to_chunks=split_long_segments_to_chunks,
+            filter_empty_labels=filter_empty_labels,
         )
     else:
         with DistributedContext() as context:
@@ -498,6 +504,7 @@ def get_dataset(
             min_input_len=min_input_len,
             text_transformations=text_transformations,
             split_long_segments_to_chunks=split_long_segments_to_chunks,
+            filter_empty_labels=filter_empty_labels,
         )
 
     # Filter samples shorter than 0.1s - {MIN_INPUT_LEN},
