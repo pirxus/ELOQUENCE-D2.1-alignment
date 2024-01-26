@@ -58,6 +58,11 @@ class AudioFolderVAD(folder_based_builder.FolderBasedBuilder):
         }
         self.vad_pipeline.instantiate(params)
 
+    def _split_generators(self, dl_manager):
+        splits = super()._split_generators(dl_manager)
+        self.info.features = datasets.Features(**self.info.features, input_len=datasets.Value("float"))
+        return splits
+
     def _prepare_split(
         self,
         split_generator: SplitGenerator,
@@ -84,6 +89,7 @@ class AudioFolderVAD(folder_based_builder.FolderBasedBuilder):
                 yield f"{example_id}_{segment.start:.2f}_{segment.end:.2f}", {
                     **example,
                     "audio": audio_encoder.encode_example({"array": chunk, "sampling_rate": sample_rate}),
+                    "input_len": len(chunk),
                 }
 
 
