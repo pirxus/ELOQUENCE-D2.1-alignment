@@ -44,6 +44,7 @@ class AudioFolderVAD(folder_based_builder.FolderBasedBuilder):
         vad_batch_size: int = 1024,
         vad_min_duration_on: float = 0.0,
         vad_min_duration_off: float = 0.0,
+        sampling_rate: int = 16000,
         **kwargs,
     ):
         super().__init__(*args, **kwargs)
@@ -57,6 +58,7 @@ class AudioFolderVAD(folder_based_builder.FolderBasedBuilder):
             "min_duration_off": vad_min_duration_off,
         }
         self.vad_pipeline.instantiate(params)
+        self.sampling_rate = sampling_rate
 
     def _split_generators(self, dl_manager):
         splits = super()._split_generators(dl_manager)
@@ -75,7 +77,7 @@ class AudioFolderVAD(folder_based_builder.FolderBasedBuilder):
         super()._prepare_split(split_generator, check_duplicate_keys, file_format, num_proc, max_shard_size)
 
     def _generate_examples(self, files, metadata_files, split_name, add_metadata, add_labels):
-        audio_encoder = datasets.Audio(sampling_rate=16000, mono=True)
+        audio_encoder = datasets.Audio(sampling_rate=self.sampling_rate, mono=True)
         for example_id, example in super()._generate_examples(
             files, metadata_files, split_name, add_metadata, add_labels
         ):
@@ -89,7 +91,7 @@ class AudioFolderVAD(folder_based_builder.FolderBasedBuilder):
                 yield f"{example_id}_{segment.start:.2f}_{segment.end:.2f}", {
                     **example,
                     "audio": audio_encoder.encode_example({"array": chunk, "sampling_rate": sample_rate}),
-                    "input_len": len(chunk),
+                    "input_len": len(chunk) / self.sampling_rate,
                 }
 
 
