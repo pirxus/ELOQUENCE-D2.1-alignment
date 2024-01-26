@@ -31,7 +31,14 @@ class AudioFolderVAD(folder_based_builder.FolderBasedBuilder):
     CLASSIFICATION_TASK = AudioClassification(audio_column="audio", label_column="label")
 
     def __init__(
-        self, vad_model, vad_device, vad_batch_size, vad_min_duration_on, vad_min_duration_off, *args, **kwargs
+        self,
+        vad_model: str = "pyannote/segmentation-3.0",
+        vad_device: str = "cpu",
+        vad_batch_size: int = 1024,
+        vad_min_duration_on: float = 0.0,
+        vad_min_duration_off: float = 0.0,
+        *args,
+        **kwargs,
     ):
         super().__init__(*args, **kwargs)
         device = torch.device(vad_device)
