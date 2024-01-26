@@ -1,14 +1,20 @@
 """AudioFolderVAD dataset."""
-from typing import List
+from typing import TYPE_CHECKING, List, Optional, Union
 
 import datasets
 import torch
 import torchaudio
 from datasets.packaged_modules.folder_based_builder import folder_based_builder
+from datasets.splits import SplitGenerator
 from datasets.tasks import AudioClassification
+
+# pylint: disable=no-name-in-module
+from multiprocess import set_start_method
 from pyannote.audio import Model
 from pyannote.audio.pipelines import VoiceActivityDetection
 
+if TYPE_CHECKING:
+    pass
 logger = datasets.utils.logging.get_logger(__name__)
 
 
@@ -32,25 +38,36 @@ class AudioFolderVAD(folder_based_builder.FolderBasedBuilder):
 
     def __init__(
         self,
+        *args,
         vad_model: str = "pyannote/segmentation-3.0",
         vad_device: str = "cpu",
         vad_batch_size: int = 1024,
         vad_min_duration_on: float = 0.0,
         vad_min_duration_off: float = 0.0,
-        *args,
         **kwargs,
     ):
         super().__init__(*args, **kwargs)
         device = torch.device(vad_device)
         model = Model.from_pretrained(vad_model, use_auth_token=kwargs.get("use_auth_token", None))
         self.vad_pipeline = VoiceActivityDetection(segmentation=model, batch_size=vad_batch_size, device=device)
-        HYPER_PARAMETERS = {
+        params = {
             # remove speech regions shorter than that many seconds.
             "min_duration_on": vad_min_duration_on,
             # fill non-speech regions shorter than that many seconds.
             "min_duration_off": vad_min_duration_off,
         }
-        self.vad_pipeline.instantiate(HYPER_PARAMETERS)
+        self.vad_pipeline.instantiate(params)
+
+    def _prepare_split(
+        self,
+        split_generator: SplitGenerator,
+        check_duplicate_keys: bool,
+        file_format="arrow",
+        num_proc: Optional[int] = None,
+        max_shard_size: Optional[Union[int, str]] = None,
+    ):
+        set_start_method("spawn")
+        super()._prepare_split(split_generator, check_duplicate_keys, file_format, num_proc, max_shard_size)
 
     def _generate_examples(self, files, metadata_files, split_name, add_metadata, add_labels):
         audio_encoder = datasets.Audio(sampling_rate=16000, mono=True)
