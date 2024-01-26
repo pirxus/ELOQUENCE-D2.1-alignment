@@ -2,14 +2,7 @@ import sys
 
 from datasets import load_dataset
 from huggingface_hub import repo_exists
-from tokenizers import (
-    Tokenizer,
-    decoders,
-    normalizers,
-    pre_tokenizers,
-    processors,
-    trainers,
-)
+from tokenizers import Tokenizer, decoders, pre_tokenizers, processors, trainers
 from tokenizers.models import BPE, Unigram
 from transformers import HfArgumentParser, PreTrainedTokenizerFast
 from transformers.utils import logging
@@ -119,6 +112,7 @@ if __name__ == "__main__":
         train_split=data_args.train_split,
         validation_split=data_args.validation_split,
         text_transformations=data_args.text_transformations,
+        split_long_segments_to_chunks=data_args.split_long_segments_to_chunks,
     )
 
     logger.info(f"Dataset processed successfully.{dataset}")
