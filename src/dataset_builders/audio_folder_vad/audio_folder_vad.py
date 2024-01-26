@@ -21,6 +21,8 @@ class AudioFolderConfig(folder_based_builder.FolderBasedBuilderConfig):
 class AudioFolderVAD(folder_based_builder.FolderBasedBuilder):
     """AudioFolderVAD dataset."""
 
+    DEFAULT_WRITER_BATCH_SIZE = 100
+
     BASE_FEATURE = datasets.Audio
     BASE_COLUMN_NAME = "audio"
     BUILDER_CONFIG_CLASS = AudioFolderConfig
@@ -33,9 +35,9 @@ class AudioFolderVAD(folder_based_builder.FolderBasedBuilder):
         self.vad_pipeline = VoiceActivityDetection(segmentation=model)
         HYPER_PARAMETERS = {
             # remove speech regions shorter than that many seconds.
-            "min_duration_on": 0.0,
+            "min_duration_on": 2.0,
             # fill non-speech regions shorter than that many seconds.
-            "min_duration_off": 0.0,
+            "min_duration_off": 1.0,
         }
         self.vad_pipeline.instantiate(HYPER_PARAMETERS)
 
