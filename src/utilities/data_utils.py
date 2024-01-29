@@ -200,7 +200,6 @@ def prepare_dataset(
 ) -> DatasetDict:
     """Preprocesses dataset."""
     if audio_column_name is not None and split_long_segments_to_chunks:
-        dataset.map()
         dataset = distributed_process(
             dataset,
             process_by="map",
