@@ -318,7 +318,9 @@ class SSLTrainer(Trainer):
         num_losses = inputs["mask_time_indices"].sum()
         sub_attention_mask = inputs.pop("sub_attention_mask", None)
         sub_attention_mask = (
-            sub_attention_mask if sub_attention_mask is not None else torch.ones_like(inputs["mask_time_indices"])
+            sub_attention_mask
+            if sub_attention_mask is not None
+            else torch.ones_like(inputs["mask_time_indices"], device=inputs["mask_time_indices"].device)
         )
         percent_masked = num_losses / sub_attention_mask.sum()
 
@@ -326,7 +328,9 @@ class SSLTrainer(Trainer):
         additional_logs["div_loss"] = outputs.diversity_loss / num_losses
         additional_logs["%_mask_idx"] = percent_masked / self.accelerator.num_processes
         additional_logs["ppl"] = outputs.codevector_perplexity
-        additional_logs["temp"] = torch.tensor(self.gumbel_callback.current_gumbel_temperature)
+        additional_logs["temp"] = torch.tensor(
+            self.gumbel_callback.current_gumbel_temperature, device=inputs["mask_time_indices"].device
+        )
 
         for key in additional_logs.keys():
             additional_logs[key] = additional_logs[key].detach()
