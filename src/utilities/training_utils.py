@@ -399,7 +399,7 @@ class SSLTrainer(Trainer):
             grad_norm = model.get_global_grad_norm()
         else:
             grad_norm = _grad_norm.item() if _grad_norm is not None else None
-        additional_logs["gradient_norm"] = torch.tensor(grad_norm)
+        additional_logs["gradient_norm"] = torch.tensor(grad_norm, device=loss.device)
 
         loss_detached = loss.detach() / self.args.gradient_accumulation_steps
         loss_detached_with_metadata = MetadataTensor(loss_detached, metadata=additional_logs)
