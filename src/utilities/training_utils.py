@@ -733,7 +733,7 @@ class SSLTrainer(Trainer):
         # Gather all remaining tensors and put them back on the CPU
         if losses_host is not None:
             additional_metrics = {
-                key: np.array([value.metadata[key] for value in losses_host]).mean().item()
+                key: np.array([value.metadata[key].cpu() for value in losses_host]).mean().item()
                 for key in losses_host[-1].metadata.keys()
             }
             losses = np.array(nested_numpify(losses_host))
