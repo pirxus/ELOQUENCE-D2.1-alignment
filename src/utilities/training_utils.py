@@ -562,6 +562,27 @@ class SSLTrainer(Trainer):
 
         return (loss, logits, labels)
 
+    @staticmethod
+    def _expand_metadata(metadata, num_processes):
+        expanded_list = [[] for _ in range(num_processes)]
+
+        # Iterate over each dictionary in the list
+        for per_process_index, data_dict in enumerate(metadata):
+            # Get the keys and values from the dictionary
+            keys = list(data_dict.keys())
+            values = list(data_dict.values())
+
+            # Iterate over the indices of the lists
+            for i in range(len(values[0])):
+                # Create a new dictionary with elements at the current index for each key
+                new_dict = {keys[j]: values[j][i] for j in range(len(keys))}
+                expanded_list[i].append(new_dict)
+
+        output_arr = []
+        for i in range(num_processes):
+            output_arr.extend(expanded_list[i])
+        return output_arr
+
     def evaluation_loop(
         self,
         dataloader: DataLoader,
@@ -666,7 +687,13 @@ class SSLTrainer(Trainer):
             # Update containers on host
             if loss is not None:
                 # TODO: Gather metadata tensors properly
-                losses = self.accelerator.gather_for_metrics((loss.repeat(batch_size)))
+                loss_repeated = loss.repeat(batch_size)
+                losses = self.accelerator.gather_for_metrics(torch.tensor(loss_repeated))
+                metadata = self.accelerator.gather_for_metrics(loss_repeated.metadata)
+                losses = MetadataTensor(
+                    losses, self._expand_metadata(metadata, self.accelerator.num_processes)[: len(losses)]
+                )
+                # serialize list of dicts containing tensors to list of dicts containing single item
                 losses_host = losses if losses_host is None else [*losses_host, *losses]
             if labels is not None:
                 labels = self.accelerator.pad_across_processes(labels, dim=1, pad_index=-100)
