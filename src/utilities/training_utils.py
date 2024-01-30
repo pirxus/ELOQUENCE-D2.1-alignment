@@ -169,7 +169,7 @@ class MetadataTensor(torch.Tensor):
             [
                 MetadataTensor(
                     x,
-                    metadata[index] if len(metadata) > 1 else (metadata[0] if isinstance(metadata, list) else metadata),
+                    {key: metadata[key][index] for key in metadata.keys()},
                 )
                 for index, x in enumerate(super().__iter__())
             ]
@@ -177,13 +177,13 @@ class MetadataTensor(torch.Tensor):
 
     def repeat(self, *sizes):
         result = super(MetadataTensor, self).repeat(*sizes)
-        result.metadata = [self.metadata.copy()] * sizes[0]
+        result.metadata = {key: self.metadata[key].repeat(*sizes) for key in self.metadata.keys()}
         return result
 
     def __getitem__(self, index):
         # Override the slicing behavior
         result = super(MetadataTensor, self).__getitem__(index)
-        metadata_result = self.metadata[index]
+        metadata_result = {key: self.metadata[key][index] for key in self.metadata.keys()}
         return MetadataTensor(result, metadata_result)
 
     @classmethod
@@ -689,10 +689,10 @@ class SSLTrainer(Trainer):
                 # TODO: Gather metadata tensors properly
                 loss_repeated = loss.repeat(batch_size)
                 losses = self.accelerator.gather_for_metrics(torch.tensor(loss_repeated))
-                metadata = self.accelerator.gather_for_metrics(loss_repeated.metadata)
-                losses = MetadataTensor(
-                    losses, self._expand_metadata(metadata, self.accelerator.num_processes)[: len(losses)]
-                )
+                metadata = {}
+                for key in loss_repeated.metadata.keys():
+                    metadata[key] = self.accelerator.gather_for_metrics(loss_repeated.metadata[key])
+                losses = MetadataTensor(losses, metadata)
                 # serialize list of dicts containing tensors to list of dicts containing single item
                 losses_host = losses if losses_host is None else [*losses_host, *losses]
             if labels is not None:
