@@ -162,13 +162,29 @@ class MetadataTensor(torch.Tensor):
 
         return MetadataTensor(result, result.metadata)
 
+    def __iter__(self):
+        metadata = self.metadata
+
+        return iter(
+            [
+                MetadataTensor(
+                    x,
+                    metadata[index] if len(metadata) > 1 else (metadata[0] if isinstance(metadata, list) else metadata),
+                )
+                for index, x in enumerate(super().__iter__())
+            ]
+        )
+
     def repeat(self, *sizes):
-        # Your custom implementation of the repeat method
-        # Here, I'm just printing a message for demonstration purposes
-        print("Custom repeat method is called.")
         result = super(MetadataTensor, self).repeat(*sizes)
         result.metadata = [self.metadata.copy()] * sizes[0]
         return result
+
+    def __getitem__(self, index):
+        # Override the slicing behavior
+        result = super(MetadataTensor, self).__getitem__(index)
+        metadata_result = self.metadata[index]
+        return MetadataTensor(result, metadata_result)
 
     @classmethod
     def __torch_function__(cls, func, types, args=(), kwargs=None):
@@ -641,7 +657,7 @@ class SSLTrainer(Trainer):
 
             # Prediction step
             loss, logits, labels = self.prediction_step(model, inputs, prediction_loss_only, ignore_keys=ignore_keys)
-            print(self.accelerator.local_process_index, loss, inputs["input_values"].shape)
+
             inputs_decode = self._prepare_input(inputs["input_ids"]) if args.include_inputs_for_metrics else None
 
             if is_torch_tpu_available():
