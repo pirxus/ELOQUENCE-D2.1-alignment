@@ -427,7 +427,7 @@ class SSLTrainer(Trainer):
             for item in tr_loss.metadata.keys():
                 item_scalar = self._nested_gather(tr_loss.metadata[item]).sum().item()
                 tr_loss.metadata[item] -= tr_loss.metadata[item]
-                logs[item] = round(item_scalar / (self.state.global_step - self._globalstep_last_logged), 4)
+                logs[item] = item_scalar
             # all_gather + mean() to get average loss over all processes
             tr_loss_scalar = self._nested_gather(tr_loss).sum().item()
 
