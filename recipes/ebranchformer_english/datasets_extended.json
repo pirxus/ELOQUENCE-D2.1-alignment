@@ -163,7 +163,6 @@
       "train"
     ],
     "validation_splits": [
-      "validation"
     ],
     "test_splits": [
       "test"
@@ -189,7 +188,6 @@
       "train"
     ],
     "validation_splits": [
-      "validation"
     ],
     "test_splits": [
       "test"
