@@ -387,8 +387,9 @@ class BestRQEBranchformerForPreTraining(Wav2Vec2ForPreTraining):
         )
         for rpq in self.rpqs:
             rpq.requires_grad = False
-        self.classifier = nn.Sequential(
-            nn.Linear(config.hidden_size, config.best_rq_codebook_size), nn.LogSoftmax(dim=-1)
+        self.classifiers = nn.ModuleList(
+            nn.Sequential(nn.Linear(config.hidden_size, config.best_rq_codebook_size), nn.LogSoftmax(dim=-1))
+            for _ in range(config.best_rq_num_books)
         )
 
     def forward(
@@ -418,10 +419,9 @@ class BestRQEBranchformerForPreTraining(Wav2Vec2ForPreTraining):
         extract_features = outputs[1]
         last_hidden_states = outputs[0]
 
-        probs = self.classifier(last_hidden_states)
-
         loss = None
-        for rpq in self.rpqs:
+        for classifier, rpq in zip(self.classifiers, self.rpqs):
+            probs = classifier(last_hidden_states)
             labels = rpq(extract_features)
             # pylint: disable=invalid-unary-operand-type
             labels.masked_fill_(~mask_time_indices, -100)
