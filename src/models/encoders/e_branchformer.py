@@ -373,7 +373,7 @@ class BestRQEBranchformerForPreTraining(Wav2Vec2ForPreTraining):
         super().__init__(config)
         self.wav2vec2 = Wav2Vec2EBranchformerModel(config)
         self.post_init()
-        self.rpqs = [
+        self.rpqs = nn.ModuleList(
             nn.Sequential(
                 nn.LayerNorm(config.conv_dim[-1], elementwise_affine=True),
                 RandomProjectionQuantizer(
@@ -384,7 +384,7 @@ class BestRQEBranchformerForPreTraining(Wav2Vec2ForPreTraining):
                 ),
             )
             for _ in range(config.best_rq_num_books)
-        ]
+        )
         for rpq in self.rpqs:
             rpq.requires_grad = False
         self.classifier = nn.Sequential(
