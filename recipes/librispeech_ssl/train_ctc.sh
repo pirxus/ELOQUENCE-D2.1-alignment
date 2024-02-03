@@ -7,7 +7,7 @@
 #SBATCH --time 2-00:00:00
 #SBATCH --output=/mnt/proj1/open-28-58/lakoc/huggingface_asr/outputs/librispeech_ssl/train_ctc.out
 
-EXPERIMENT="train_ctc"
+EXPERIMENT="train_ctc_v1"
 PROJECT="librispeech_ssl"
 WORK_DIR="/mnt/proj1/open-28-58/lakoc/huggingface_asr"
 RECIPE_DIR="${WORK_DIR}/recipes/librispeech_ssl"
