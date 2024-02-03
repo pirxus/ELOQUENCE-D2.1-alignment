@@ -30,7 +30,7 @@ args=(
   # General training arguments
   --output_dir=$EXPERIMENT_PATH
   --per_device_train_batch_size="40"
-  --per_device_eval_batch_size="1"
+  --per_device_eval_batch_size="64"
   --dataloader_num_workers="24"
   --num_train_epochs="50"
   --group_by_length="True"
@@ -52,8 +52,8 @@ args=(
   # Logging, saving and evaluation related arguments
   --report_to="wandb"
   --logging_steps="10"
-  --eval_steps=1
-  --evaluation_strategy="steps"
+  --evaluation_strategy="epoch"
+  --save_strategy="epoch"
   --greater_is_better="False"
   --save_total_limit="5"
 
