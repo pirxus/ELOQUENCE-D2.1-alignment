@@ -7,11 +7,10 @@
       "train.clean.100",
       "train.clean.360",
       "train.other.500",
-              "validation.clean",
+      "validation.clean",
       "validation.other"
     ],
     "validation_splits": [
-      "test.clean"
     ],
     "test_splits": [
     ],

@@ -64,6 +64,8 @@ args=(
   --datasets_creation_config="${RECIPE_DIR}/librispeech_ssl.json"
   --writer_batch_size="50"
   --split_long_segments_to_chunks
+  --cut_validation_from_train
+  --validation_slice="10%"
 
   # Preprocessing related arguments
   --data_preprocessing_config="${WORK_DIR}/configs/default_data_preprocessing2d.json"
