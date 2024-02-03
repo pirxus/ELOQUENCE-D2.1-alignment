@@ -5,9 +5,9 @@
 #SBATCH --gpus 8
 #SBATCH --nodes 1
 #SBATCH --time 2-00:00:00
-#SBATCH --output=/mnt/proj1/open-28-58/lakoc/huggingface_asr/outputs/librispeech_ssl/ssl_small_8gpus_bestrq.out
+#SBATCH --output=/mnt/proj1/open-28-58/lakoc/huggingface_asr/outputs/librispeech_ssl/ssl_small_8gpus_wav2vec2.out
 
-EXPERIMENT="ssl_small_8gpus_bestrq"
+EXPERIMENT="ssl_small_8gpus_wav2vec2"
 PROJECT="librispeech_ssl"
 WORK_DIR="/mnt/proj1/open-28-58/lakoc/huggingface_asr"
 RECIPE_DIR="${WORK_DIR}/recipes/librispeech_ssl"
@@ -70,7 +70,7 @@ args=(
 
   # Model related arguments
   --expect_2d_input
-  --base_encoder_model="Lakoc/ebranchformer_12_256h_2d_bestrq"
+  --base_encoder_model="Lakoc/ebranchformer_12_256h_2d"
   --feature_extractor_name="Lakoc/log_80mel_extractor_16k")
 
 torchrun --standalone --nnodes=1 --nproc-per-node=$SLURM_GPUS_ON_NODE src/trainers/pretrain_wav2vec2.py "${args[@]}"
