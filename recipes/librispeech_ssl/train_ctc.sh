@@ -5,9 +5,9 @@
 #SBATCH --gpus 4
 #SBATCH --nodes 1
 #SBATCH --time 2-00:00:00
-#SBATCH --output=/mnt/proj1/open-28-58/lakoc/huggingface_asr/outputs/librispeech_ssl/train_ctc.out
+#SBATCH --output=/mnt/proj1/open-28-58/lakoc/huggingface_asr/outputs/librispeech_ssl/train_ctc_v3.out
 
-EXPERIMENT="train_ctc_v1"
+EXPERIMENT="train_ctc_v3"
 PROJECT="librispeech_ssl"
 WORK_DIR="/mnt/proj1/open-28-58/lakoc/huggingface_asr"
 RECIPE_DIR="${WORK_DIR}/recipes/librispeech_ssl"
@@ -29,7 +29,7 @@ cd $WORK_DIR
 args=(
   # General training arguments
   --output_dir=$EXPERIMENT_PATH
-  --per_device_train_batch_size="40"
+  --per_device_train_batch_size="32"
   --per_device_eval_batch_size="64"
   --dataloader_num_workers="24"
   --num_train_epochs="50"
@@ -68,7 +68,7 @@ args=(
   --test_splits librispeech_test.clean librispeech_test.other
 
   # Preprocessing related arguments
-  --data_preprocessing_config="${WORK_DIR}/configs/default_data_preprocessing2d.json"
+  --data_preprocessing_config="${RECIPE_DIR}/data_preprocessing2d.json"
 
   # Model related arguments
   --expect_2d_input
