@@ -78,6 +78,14 @@ class GeneralTrainingArguments(Seq2SeqTrainingArguments):
 
 
 @dataclass
+class PretrainingArguments(GeneralTrainingArguments):
+    _argument_group_name = "Pretraining related arguments"
+    gumbel_temperature_decay: Optional[float] = field(default=0.999995, metadata={"help": "Gumbel temperature decay."})
+    min_gumbel_temperature: Optional[float] = field(default=0.5, metadata={"help": "Minimum Gumbel temperature."})
+    max_gumbel_temperature: Optional[float] = field(default=2.0, metadata={"help": "Maximum Gumbel temperature."})
+
+
+@dataclass
 class GenerationArguments:
     _argument_group_name = "Generation related arguments"
     """General generation arguments."""
@@ -153,8 +161,20 @@ class DataTrainingArguments:
     train_split: Optional[str] = field(default="train", metadata={"help": "Training split to be used."})
     validation_split: Optional[str] = field(default="validation", metadata={"help": "Validation split to be used."})
     test_splits: Optional[List[str]] = field(default=None, metadata={"help": "Splits to use for evaluation."})
-    validation_slice: Optional[int] = field(default=None, metadata={"help": "Part of the validation split to be used."})
+    validation_slice: Optional[str] = field(default=None, metadata={"help": "Part of the validation split to be used."})
     sampling_rate: Optional[int] = field(default=16_000, metadata={"help": "Sampling rate for the model."})
+    split_long_segments_to_chunks: Optional[bool] = field(
+        default=False, metadata={"help": "Whether to split long segments to chunks."}
+    )
+    filter_empty_labels: Optional[bool] = field(
+        default=False, metadata={"help": "Whether to filter out samples with empty labels."}
+    )
+    cut_validation_from_train: Optional[bool] = field(
+        default=False, metadata={"help": "Whether to cut validation split from train split."}
+    )
+    validation_slice_seed: Optional[int] = field(
+        default=None, metadata={"help": "Seed to use for splitting validation slice."}
+    )
 
 
 @dataclass
