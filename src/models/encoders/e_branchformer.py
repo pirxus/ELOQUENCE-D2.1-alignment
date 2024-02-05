@@ -407,8 +407,7 @@ class BestRQEBranchformerForPreTraining(Wav2Vec2ForPreTraining):
         for rpq in self.rpqs:
             rpq.requires_grad = False
         self.classifiers = nn.ModuleList(
-            nn.Sequential(nn.Linear(config.hidden_size, config.best_rq_codebook_size), nn.Softmax(dim=-1))
-            for _ in range(config.best_rq_num_books)
+            nn.Linear(config.hidden_size, config.best_rq_codebook_size) for _ in range(config.best_rq_num_books)
         )
 
     def forward(
