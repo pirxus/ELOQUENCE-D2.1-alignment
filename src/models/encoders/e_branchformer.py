@@ -370,6 +370,8 @@ class RandomProjectionQuantizer(nn.Module):
         nn.init.xavier_uniform_(self.random_projection.weight)
 
         self.code_book = nn.Parameter(torch.randn(config.best_rq_codebook_size, config.best_rq_codebook_dim))
+        nn.init.normal_(self.code_book)
+        self.code_book = nn.Parameter(torch.nn.functional.normalize(self.code_book, p=2, dim=-1))
 
         self.random_projection.weight.requires_grad = False
         self.code_book.requires_grad = False
@@ -385,10 +387,12 @@ class RandomProjectionQuantizer(nn.Module):
             torch.Tensor with shape `(N)`
 
         """
+        from torch.nn.functional import normalize
+
         targets = self.random_projection(input_values).unsqueeze(-2)
 
         # Compute l2 norm targets and code vectors
-        vector_distances = vector_norm(targets - self.code_book, dim=-1)
+        vector_distances = vector_norm(normalize(targets, p=2, dim=-1) - self.code_book, dim=-1)
 
         labels = torch.argmin(vector_distances, dim=-1)
 
@@ -438,11 +442,20 @@ class BestRQEBranchformerForPreTraining(Wav2Vec2ForPreTraining):
         last_hidden_states = outputs[0]
 
         loss = None
+        utilization = torch.zeros(1, device=last_hidden_states.device)
         for classifier, rpq in zip(self.classifiers, self.rpqs):
             probs = classifier(last_hidden_states)
             labels = rpq(extract_features)
             # pylint: disable=invalid-unary-operand-type
             labels.masked_fill_(~mask_time_indices, -100)
+
+            valid_elements = labels[labels != -100]
+
+            # Calculate the number of duplicates
+            duplicates_count = len(valid_elements) - len(torch.unique(valid_elements))
+
+            # Calculate utilization
+            utilization += duplicates_count / len(valid_elements)
 
             loss_local = nn.functional.cross_entropy(probs.transpose(1, 2), labels, reduction="sum")
             if loss is None:
@@ -458,7 +471,7 @@ class BestRQEBranchformerForPreTraining(Wav2Vec2ForPreTraining):
         return Wav2Vec2ForPreTrainingOutput(
             loss=loss,
             projected_states=last_hidden_states,
-            codevector_perplexity=torch.zeros(1, device=loss.device),
+            codevector_perplexity=utilization / len(self.rpqs),
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
             contrastive_loss=torch.zeros(1, device=loss.device),
