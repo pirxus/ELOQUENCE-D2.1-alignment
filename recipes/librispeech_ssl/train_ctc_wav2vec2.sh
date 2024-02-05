@@ -5,9 +5,9 @@
 #SBATCH --gpus 4
 #SBATCH --nodes 1
 #SBATCH --time 2-00:00:00
-#SBATCH --output=/mnt/proj1/open-28-58/lakoc/huggingface_asr/outputs/librispeech_ssl/train_ctc_wav2vec2.out
+#SBATCH --output=/mnt/proj1/open-28-58/lakoc/huggingface_asr/outputs/librispeech_ssl/train_ctc_wav2vec2_fixed.out
 
-EXPERIMENT="train_ctc_wav2vec2"
+EXPERIMENT="train_ctc_wav2vec2_fixed"
 PROJECT="librispeech_ssl"
 WORK_DIR="/mnt/proj1/open-28-58/lakoc/huggingface_asr"
 RECIPE_DIR="${WORK_DIR}/recipes/librispeech_ssl"

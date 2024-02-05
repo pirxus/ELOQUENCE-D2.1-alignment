@@ -76,4 +76,4 @@ args=(
   --base_encoder_model="Lakoc/ebranchformer_12_256h_2d"
   --feature_extractor_name="Lakoc/log_80mel_extractor_16k")
 
-python src/trainers/train_ctc_asr.py "${args[@]}"
+torchrun --standalone --nnodes=1 --nproc-per-node=$SLURM_GPUS_ON_NODE src/trainers/train_ctc_asr.py "${args[@]}"
