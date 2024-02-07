@@ -175,7 +175,7 @@ class DataTrainingArguments:
     validation_slice_seed: Optional[int] = field(
         default=None, metadata={"help": "Seed to use for splitting validation slice."}
     )
-    use_fork_server: Optional[bool] = field(
+    use_forkserver: Optional[bool] = field(
         default=False, metadata={"help": "Whether to use fork server for data loading."}
     )
 
