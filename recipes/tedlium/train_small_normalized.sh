@@ -65,7 +65,7 @@ args=(
   --remove_unused_columns="False"
   --preprocessing_num_workers="128"
   --datasets_creation_config="${RECIPE_DIR}/tedlium_normalized.json"
-  --writer_batch_size="1000"
+  --writer_batch_size="200"
   --test_splits tedlium3_test
 
   # Preprocessing related arguments
@@ -73,7 +73,7 @@ args=(
 
   # Model related arguments
   --from_encoder_decoder_config
-  --tokenizer_name="Lakoc/english_corpus_uni5000"
+  --tokenizer_name="Lakoc/ted_uni500_normalized"
   --feature_extractor_name="Lakoc/log_80mel_extractor_16k"
   --base_encoder_model="Lakoc/fisher_ebranchformer_enc_12_layers_fixed"
   --base_decoder_model="Lakoc/gpt2_tiny_decoder_6_layers"
