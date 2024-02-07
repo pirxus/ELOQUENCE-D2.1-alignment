@@ -204,7 +204,7 @@ def prepare_dataset(
     if reshuffle_at_start:
         with DistributedContext() as context:
             context.wait_before()
-            dataset = dataset.shuffle()
+            dataset = dataset.shuffle(seed=42)
             context.wait_after()
 
     if audio_column_name is not None and split_long_segments_to_chunks:
