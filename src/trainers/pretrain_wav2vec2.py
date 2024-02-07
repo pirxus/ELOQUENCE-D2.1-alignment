@@ -44,7 +44,7 @@ if __name__ == "__main__":
         validation_slice_str=data_args.validation_slice,
         cut_validation_from_train=data_args.cut_validation_from_train,
         seed=data_args.validation_slice_seed,
-        use_forkserver=data_args.use_forkserver,
+        reshuffle_at_start=data_args.reshuffle_at_start,
     )
 
     logger.info(f"Dataset processed successfully.{dataset}")

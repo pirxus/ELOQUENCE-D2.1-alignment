@@ -3,7 +3,6 @@ import json
 import re
 from typing import Dict, List, Optional, Tuple, Union
 
-import multiprocess as mp
 import numpy as np
 import torch.distributed
 from datasets import (
@@ -199,8 +198,15 @@ def prepare_dataset(
     sampling_rate: int,
     max_input_len: float,
     min_input_len: float,
+    reshuffle_at_start: bool,
 ) -> DatasetDict:
     """Preprocesses dataset."""
+    if reshuffle_at_start:
+        with DistributedContext() as context:
+            context.wait_before()
+            dataset = dataset.shuffle()
+            context.wait_after()
+
     if audio_column_name is not None and split_long_segments_to_chunks:
         if length_column_name is not None and length_column_name not in set().union(*dataset.column_names.values()):
             dataset = distributed_process(
@@ -428,6 +434,7 @@ def load_multiple_datasets(
             min_input_len=min_input_len,
             split_long_segments_to_chunks=split_long_segments_to_chunks,
             filter_empty_labels=filter_empty_labels,
+            reshuffle_at_start=dataset_config.get("reshuffle_at_start", False),
         )
 
         for column, global_column in [
@@ -511,13 +518,9 @@ def get_dataset(
     validation_slice_str: str,
     cut_validation_from_train: bool,
     seed: Optional[int],
-    use_forkserver: bool,
+    reshuffle_at_start: bool,
 ) -> Tuple[DatasetDict, Dataset]:
     """Loads single or multiple datasets, preprocess, and merge them."""
-    if use_forkserver:
-        # pylint: disable=no-member
-        mp.set_start_method("forkserver")
-
     if datasets_creation_config_path is not None:
         dataset = load_multiple_datasets(
             config_path=datasets_creation_config_path,
@@ -565,6 +568,7 @@ def get_dataset(
             text_transformations=text_transformations,
             split_long_segments_to_chunks=split_long_segments_to_chunks,
             filter_empty_labels=filter_empty_labels,
+            reshuffle_at_start=reshuffle_at_start,
         )
 
     # Filter samples shorter than 0.1s - {MIN_INPUT_LEN},
