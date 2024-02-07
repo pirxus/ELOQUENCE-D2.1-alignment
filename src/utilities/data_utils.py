@@ -3,6 +3,7 @@ import json
 import re
 from typing import Dict, List, Optional, Tuple, Union
 
+import multiprocess as mp
 import numpy as np
 import torch.distributed
 from datasets import (
@@ -510,8 +511,13 @@ def get_dataset(
     validation_slice_str: str,
     cut_validation_from_train: bool,
     seed: Optional[int],
+    use_forkserver: bool,
 ) -> Tuple[DatasetDict, Dataset]:
     """Loads single or multiple datasets, preprocess, and merge them."""
+    if use_forkserver:
+        # pylint: disable=no-member
+        mp.set_start_method("forkserver")
+
     if datasets_creation_config_path is not None:
         dataset = load_multiple_datasets(
             config_path=datasets_creation_config_path,
