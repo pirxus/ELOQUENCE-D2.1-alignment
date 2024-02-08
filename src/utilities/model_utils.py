@@ -201,4 +201,5 @@ def handle_whisper_generation_config(
         gen_config.forced_decoder_ids = tokenizer.get_decoder_prompt_ids(
             language=model_args.whisper_language, task=model_args.whisper_task
         )
+    gen_config.max_length = model.generation_config.max_length
     gen_config.decoder_start_token_id = model.generation_config.decoder_start_token_id
