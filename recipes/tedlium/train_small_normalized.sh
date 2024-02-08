@@ -5,9 +5,9 @@
 #SBATCH --gpus 4
 #SBATCH --nodes 1
 #SBATCH --time 2-00:00:00
-#SBATCH --output=/mnt/proj1/open-28-58/lakoc/huggingface_asr/outputs/ebranchformer_tedlium_small_normalized.out
+#SBATCH --output=/mnt/proj1/open-28-58/lakoc/huggingface_asr/outputs/ebranchformer_tedlium_small_normalized_v2.out
 
-EXPERIMENT="ebranchformer_tedlium_small_normalized"
+EXPERIMENT="ebranchformer_tedlium_small_normalized_v2"
 PROJECT="regularizations_english_corpus"
 WORK_DIR="/mnt/proj1/open-28-58/lakoc/huggingface_asr"
 RECIPE_DIR="${WORK_DIR}/recipes/tedlium"
@@ -31,7 +31,7 @@ args=(
   --per_device_train_batch_size="64"
   --per_device_eval_batch_size="32"
   --dataloader_num_workers="24"
-  --num_train_epochs="50"
+  --num_train_epochs="150"
   --group_by_length="True"
   --bf16
   --do_train
