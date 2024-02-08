@@ -34,10 +34,10 @@
       "train"
     ],
     "validation_splits": [
-      "dev"
+      "test"
     ],
     "test_splits": [
-      "test"
+      "dev"
     ],
     "text_column_name": "labels",
     "audio_column_name": "audio",
