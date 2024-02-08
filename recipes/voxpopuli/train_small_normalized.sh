@@ -5,9 +5,9 @@
 #SBATCH --gpus 4
 #SBATCH --nodes 1
 #SBATCH --time 2-00:00:00
-#SBATCH --output=/mnt/proj1/open-28-58/lakoc/huggingface_asr/outputs/ebranchformer_voxpopuli_small_normalized.out
+#SBATCH --output=/mnt/proj1/open-28-58/lakoc/huggingface_asr/outputs/ebranchformer_voxpopuli_small_normalized_150e.out
 
-EXPERIMENT="ebranchformer_voxpopuli_small_normalized"
+EXPERIMENT="ebranchformer_voxpopuli_small_normalized_150e"
 PROJECT="VoxPopuli"
 WORK_DIR="/mnt/proj1/open-28-58/lakoc/huggingface_asr"
 RECIPE_DIR="${WORK_DIR}/recipes/voxpopuli"
@@ -31,13 +31,15 @@ args=(
   --per_device_train_batch_size="64"
   --per_device_eval_batch_size="32"
   --dataloader_num_workers="24"
-  --num_train_epochs="50"
+  --num_train_epochs="150"
   --group_by_length="True"
   --bf16
   --do_train
   --do_evaluate
   --joint_decoding_during_training
   --load_best_model_at_end
+  --restart_from="/mnt/proj1/open-28-58/lakoc/huggingface_asr/experiments/ebranchformer_voxpopuli_small_normalized/checkpoint-32650"
+  --ignore_data_skip
 
   # Optimizer related arguments
   --optim="adamw_torch"
@@ -66,7 +68,7 @@ args=(
   --preprocessing_num_workers="128"
   --datasets_creation_config="${RECIPE_DIR}/voxpopuli_normalized.json"
   --writer_batch_size="200"
-  --test_splits tedlium3_test
+  --test_splits voxpopuli_test
 
   # Preprocessing related arguments
   --data_preprocessing_config="${RECIPE_DIR}/data_preprocessing.json"
