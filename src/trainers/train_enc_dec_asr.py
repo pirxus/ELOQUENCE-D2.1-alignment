@@ -16,7 +16,10 @@ from utilities.collators import SpeechCollatorWithPadding
 from utilities.data_utils import get_dataset
 from utilities.eval_utils import compute_metrics
 from utilities.general_utils import do_evaluate, do_generate
-from utilities.model_utils import instantiate_aed_model
+from utilities.model_utils import (
+    handle_whisper_generation_config,
+    instantiate_aed_model,
+)
 from utilities.training_arguments import (
     DataTrainingArguments,
     GeneralTrainingArguments,
@@ -85,13 +88,12 @@ if __name__ == "__main__":
     logger.info(f"Model updating generation config:\n {str(gen_config)}")
     training_args.generation_max_length = gen_args.max_length
     training_args.generation_num_beams = gen_args.num_beams
-    model.generation_config = gen_config
 
-    if isinstance(model, WhisperForConditionalGeneration) and model_args.whisper_task and model_args.whisper_language:
-        model.config.suppress_tokens = []
-        model.config.forced_decoder_ids = tokenizer.get_decoder_prompt_ids(
-            language=model_args.whisper_language, task=model_args.whisper_task
-        )
+    if isinstance(model, WhisperForConditionalGeneration):
+        handle_whisper_generation_config(model_args, model, tokenizer, gen_config)
+        model.generation_config.update(**gen_config.to_dict())
+    else:
+        model.generation_config = gen_config
 
     # 5. Initialize callbacks
     callbacks = init_callbacks(data_args, training_args, dataset, feature_extractor)

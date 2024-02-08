@@ -13,9 +13,12 @@ from transformers import (
     SequenceFeatureExtractor,
     Speech2TextFeatureExtractor,
     SpeechEncoderDecoderModel,
+    WhisperForConditionalGeneration,
+    WhisperTokenizer,
 )
 from transformers.utils import logging
 
+from decoding.ctc_scorer import GenerationConfigWithCTC
 from models.auto_wrappers import CustomAutoModelForCTC, CustomAutoModelForPretraining
 from models.ctc_encoder_plus_autoregressive_decoder import (
     JointCTCAttentionEncoderDecoder,
@@ -185,3 +188,17 @@ def instantiate_speech_encoder_model(
             config.update_from_string(model_args.config_overrides)
         model = CustomAutoModelForPretraining.from_config(config)
     return model
+
+
+def handle_whisper_generation_config(
+    model_args: ModelArguments,
+    model: WhisperForConditionalGeneration,
+    tokenizer: WhisperTokenizer,
+    gen_config: GenerationConfigWithCTC,
+):
+    if model_args.whisper_task and model_args.whisper_language:
+        gen_config.suppress_tokens = []
+        gen_config.forced_decoder_ids = tokenizer.get_decoder_prompt_ids(
+            language=model_args.whisper_language, task=model_args.whisper_task
+        )
+    gen_config.decoder_start_token_id = model.generation_config.decoder_start_token_id
