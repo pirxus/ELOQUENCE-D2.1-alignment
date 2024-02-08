@@ -5,9 +5,9 @@
 #SBATCH --time 01:00:00
 #SBATCH --nodes=1
 #SBATCH --gpus=4
-#SBATCH --output=/mnt/proj1/open-28-58/lakoc/huggingface_asr/outputs/english_model_medium_regularized_greedy_decode_no_filer.out
+#SBATCH --output=/mnt/proj1/open-28-58/lakoc/huggingface_asr/outputs/decode_whisper_medium_greedy.out
 
-EXPERIMENT="english_model_medium_regularized_greedy_decode_no_filer"
+EXPERIMENT="decode_whisper_medium_greedy"
 PROJECT="regularizations_english_corpus"
 WORK_DIR="/mnt/proj1/open-28-58/lakoc/huggingface_asr"
 RECIPE_DIR="${WORK_DIR}/recipes/ebranchformer_english"
@@ -44,22 +44,23 @@ args=(
   --datasets_creation_config="${RECIPE_DIR}/datasets.json"
   --writer_batch_size="1000"
   --test_splits wsj_test fisher_swbd_dev voxpopuli_test tedlium3_test librispeech_test.clean librispeech_test.other commonvoice_en_test fleurs_test
+  --text_transformations whisper_normalize_english clean_special_tokens_english_train transforms_unfinished_words_to_unks_train
+
 
   # Preprocessing related arguments
-  --data_preprocessing_config="${RECIPE_DIR}/data_preprocessing.json"
+  --data_preprocessing_config="${WORK_DIR}/configs/default_data_preprocessing_whisper.json"
 
   # Model related arguments
-  --tokenizer_name="Lakoc/english_corpus_uni5000_normalized"
-  --feature_extractor_name="Lakoc/log_80mel_extractor_16k"
-  --from_pretrained="/mnt/proj1/open-28-58/lakoc/huggingface_asr/experiments/ebranchformer_english_medium_regularized_normalized/checkpoint-386100"
-  --expect_2d_input
+  --tokenizer_name="openai/whisper-small"
+  --feature_extractor_name="openai/whisper-small"
+  --from_pretrained="openai/whisper-small"
 
   # Generation related arguments
+  --post_process_predicitons
   --filter_empty_labels
   --num_beams="1"
   --max_length="512"
   --predict_with_generate
-  --decoding_ctc_weight="0"
 )
 
 torchrun --standalone --nnodes=1 --nproc-per-node=$SLURM_GPUS_ON_NODE src/trainers/train_enc_dec_asr.py "${args[@]}"
