@@ -90,8 +90,7 @@ if __name__ == "__main__":
     training_args.generation_num_beams = gen_args.num_beams
 
     if isinstance(model, WhisperForConditionalGeneration):
-        handle_whisper_generation_config(model_args, model, tokenizer, gen_config)
-        model.generation_config.update(**gen_config.to_dict())
+        model.generation_config.num_beams = gen_args.num_beams
     else:
         model.generation_config = gen_config
 

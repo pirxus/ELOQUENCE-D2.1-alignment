@@ -5,9 +5,9 @@
 #SBATCH --time 01:00:00
 #SBATCH --nodes=1
 #SBATCH --gpus=4
-#SBATCH --output=/mnt/proj1/open-28-58/lakoc/huggingface_asr/outputs/decode_whisper_small_greedy.out
+#SBATCH --output=/mnt/proj1/open-28-58/lakoc/huggingface_asr/outputs/decode_whisper_medium_greedy.out
 
-EXPERIMENT="decode_whisper_small_greedy"
+EXPERIMENT="decode_whisper_medium_greedy"
 PROJECT="regularizations_english_corpus"
 WORK_DIR="/mnt/proj1/open-28-58/lakoc/huggingface_asr"
 RECIPE_DIR="${WORK_DIR}/recipes/ebranchformer_english"
@@ -51,9 +51,9 @@ args=(
   --data_preprocessing_config="${WORK_DIR}/configs/default_data_preprocessing_whisper.json"
 
   # Model related arguments
-  --tokenizer_name="openai/whisper-small"
-  --feature_extractor_name="openai/whisper-small"
-  --from_pretrained="openai/whisper-small"
+  --tokenizer_name="openai/whisper-medium"
+  --feature_extractor_name="openai/whisper-medium"
+  --from_pretrained="openai/whisper-medium"
 
   # Generation related arguments
   --post_process_predicitons
@@ -63,4 +63,4 @@ args=(
   --predict_with_generate
 )
 
-torchrun --standalone --nnodes=1 --nproc-per-node=$SLURM_GPUS_ON_NODE src/trainers/train_enc_dec_asr.py "${args[@]}"
+torchrun --standalone --nnodes=1 --nproc-per-node=$SLURM_GPUS_ON_NODE src/trainers/train_enc_dec_asr.py "${args[@]}" ; exit
