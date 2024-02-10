@@ -5,7 +5,7 @@
 #SBATCH --nodes=6
 #SBATCH --ntasks=6
 #SBATCH --ntasks-per-node=1
-#SBATCH --gpus=32
+#SBATCH --gpus=48
 #SBATCH --cpus-per-task=128
 #SBATCH --time 2-00:00:00
 #SBATCH --output=/mnt/proj1/open-28-58/lakoc/huggingface_asr/outputs/ebranchformer_english_medium_normalized.out
