@@ -192,7 +192,7 @@ def prepare_dataset(
     preprocessing_num_workers: int,
     writer_batch_size: int,
     train_split: str,
-    text_transformations: List[str],
+    text_transformations: Optional[List[str]],
     split_long_segments_to_chunks: bool,
     filter_empty_labels: bool,
     sampling_rate: int,
@@ -273,7 +273,7 @@ def prepare_dataset(
         )
 
     # 2. Preprocess label columns
-    if text_column_name is not None:
+    if text_column_name is not None and text_transformations is not None:
         for transformation_name in text_transformations:
             if transformation_name.endswith("_train"):
                 if train_split is not None:
@@ -512,7 +512,7 @@ def get_dataset(
     audio_column: str,
     train_split: str,
     validation_split: str,
-    text_transformations: List[str],
+    text_transformations: Optional[List[str]],
     split_long_segments_to_chunks: bool,
     filter_empty_labels: bool,
     validation_slice_str: str,
