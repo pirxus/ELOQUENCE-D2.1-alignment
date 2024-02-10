@@ -59,7 +59,7 @@ args=(
   --length_column_name="input_len"
   --remove_unused_columns="False"
   --preprocessing_num_workers="32"
-  --datasets_creation_config="${RECIPE_DIR}/datasets.json"
+  --dataset_name="/scratch/project/open-28-57/lakoc/processed_dataset_full"
   --writer_batch_size="500"
   --test_splits wsj_test fisher_swbd_dev voxpopuli_test tedlium3_test librispeech_test.clean librispeech_test.other commonvoice_en_test fleurs_test
 
