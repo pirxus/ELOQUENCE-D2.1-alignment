@@ -7,7 +7,7 @@
 #SBATCH --time 2-00:00:00
 #SBATCH --output=/mnt/proj1/open-28-58/lakoc/huggingface_asr/outputs/ebranchformer_voxpopuli_small_base_150e.out
 
-EXPERIMENT="ebranchformer_voxpopuli_small_base_150e"
+EXPERIMENT="ebranchformer_voxpopuli_small_base"
 PROJECT="VoxPopuli"
 WORK_DIR="/mnt/proj1/open-28-58/lakoc/huggingface_asr"
 RECIPE_DIR="${WORK_DIR}/recipes/voxpopuli"
@@ -16,7 +16,7 @@ export HF_HOME="/scratch/project/open-28-57/lakoc/huggingface_cache"
 export PYTHONPATH="${PYTHONPATH}:${WORK_DIR}/src"
 export OMP_NUM_THREADS=64
 export WANDB_PROJECT=$PROJECT
-export WANDB_RUN_ID="${EXPERIMENT}"
+export WANDB_RUN_ID="${EXPERIMENT}_150e"
 
 conda deactivate
 source activate loco_asr
