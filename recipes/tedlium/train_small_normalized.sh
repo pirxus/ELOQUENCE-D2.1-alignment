@@ -5,7 +5,7 @@
 #SBATCH --gpus 4
 #SBATCH --nodes 1
 #SBATCH --time 2-00:00:00
-#SBATCH --output=/mnt/proj1/open-28-58/lakoc/huggingface_asr/outputs/ebranchformer_tedlium_small_normalized_v2.out
+#SBATCH --output=/mnt/proj1/open-28-58/lakoc/huggingface_asr/outputs/ebranchformer_tedlium_small_normalized_v3.out
 
 EXPERIMENT="ebranchformer_tedlium_small_normalized_v2"
 PROJECT="regularizations_english_corpus"
@@ -16,7 +16,7 @@ export HF_HOME="/scratch/project/open-28-57/lakoc/huggingface_cache"
 export PYTHONPATH="${PYTHONPATH}:${WORK_DIR}/src"
 export OMP_NUM_THREADS=64
 export WANDB_PROJECT=$PROJECT
-export WANDB_RUN_ID="${EXPERIMENT}"
+export WANDB_RUN_ID="${EXPERIMENT}_restart"
 
 conda deactivate
 source activate loco_asr
@@ -38,6 +38,9 @@ args=(
   --do_evaluate
   --joint_decoding_during_training
   --load_best_model_at_end
+  --restart_from="/mnt/proj1/open-28-58/lakoc/huggingface_asr/experiments/ebranchformer_tedlium_small_normalized_v2/checkpoint-85936"
+  --metric_for_best_model="eval_wer"
+  --ignore_data_skip
 
   # Optimizer related arguments
   --optim="adamw_torch"
