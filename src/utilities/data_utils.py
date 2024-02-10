@@ -1,5 +1,6 @@
 """Utilities for data loading and preprocessing."""
 import json
+import os
 import re
 from typing import Dict, List, Optional, Tuple, Union
 
@@ -42,6 +43,13 @@ tokens_escaped_regex = re.compile("|".join([r"\s" + re.escape(token) for token i
 MIN_INPUT_LEN = 0.1
 
 
+def get_local_rank():
+    if "LOCAL_RANK" in os.environ:
+        return int(os.environ["LOCAL_RANK"])
+    else:
+        return torch.distributed.get_rank()
+
+
 class DistributedContext:
     """Context manager for distributed training."""
 
@@ -53,10 +61,12 @@ class DistributedContext:
     def __enter__(self):
         """Initializes distributed context."""
         if torch.distributed.is_available() and torch.distributed.is_initialized():
-            self.local_rank = torch.distributed.get_rank()
+            self.local_rank = get_local_rank()
+            self.global_rank = torch.distributed.get_rank()
             self.world_size = torch.distributed.get_world_size()
         else:
             self.local_rank = 0
+            self.global_rank = 0
             self.world_size = 1
         return self
 
@@ -68,13 +78,13 @@ class DistributedContext:
     def wait_before(self):
         if self.world_size > 1:
             if self.local_rank > 0:
-                logger.info(f"Rank {self.local_rank}: Waiting for main process to perform the mapping")
+                logger.info(f"Rank {self.global_rank}: Waiting for main process to perform operation.")
                 torch.distributed.barrier()
 
     def wait_after(self):
         if self.world_size > 1:
             if self.local_rank == 0:
-                logger.info(f"Rank {self.local_rank}: Waiting for other processes to finish")
+                logger.info(f"Rank {self.local_rank}: Waiting for other processes to finish operation.")
                 torch.distributed.barrier()
 
 
