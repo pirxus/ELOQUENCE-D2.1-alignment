@@ -40,6 +40,7 @@ args=(
   --load_best_model_at_end
   --restart_from="/mnt/proj1/open-28-58/lakoc/huggingface_asr/experiments/ebranchformer_voxpopuli_small_base/checkpoint-32650"
   --ignore_data_skip
+  --metric_for_best_model="eval_wer"
 
   # Optimizer related arguments
   --optim="adamw_torch"
