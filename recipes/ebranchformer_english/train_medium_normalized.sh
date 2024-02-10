@@ -2,15 +2,15 @@
 #SBATCH --job-name TED
 #SBATCH --account OPEN-28-57
 #SBATCH --partition qgpu
-#SBATCH --nodes=4
-#SBATCH --ntasks=4
+#SBATCH --nodes=6
+#SBATCH --ntasks=6
 #SBATCH --ntasks-per-node=1
 #SBATCH --gpus=32
 #SBATCH --cpus-per-task=128
 #SBATCH --time 2-00:00:00
-#SBATCH --output=/mnt/proj1/open-28-58/lakoc/huggingface_asr/outputs/ebranchformer_english_small_normalized.out
+#SBATCH --output=/mnt/proj1/open-28-58/lakoc/huggingface_asr/outputs/ebranchformer_english_medium_normalized.out
 
-EXPERIMENT="ebranchformer_english_small_normalized"
+EXPERIMENT="ebranchformer_english_medium_normalized"
 PROJECT="regularizations_english_corpus"
 WORK_DIR="/mnt/proj1/open-28-58/lakoc/huggingface_asr"
 RECIPE_DIR="${WORK_DIR}/recipes/ebranchformer_english"
@@ -23,7 +23,7 @@ args=(
   --per_device_train_batch_size="64"
   --per_device_eval_batch_size="8"
   --dataloader_num_workers="24"
-  --num_train_epochs="400"
+  --num_train_epochs="100"
   --group_by_length="True"
   --bf16
   --do_train
@@ -70,8 +70,8 @@ args=(
   --from_encoder_decoder_config
   --tokenizer_name="Lakoc/english_corpus_uni5000_normalized"
   --feature_extractor_name="Lakoc/log_80mel_extractor_16k"
-  --base_encoder_model="Lakoc/fisher_ebranchformer_enc_12_layers_fixed"
-  --base_decoder_model="Lakoc/gpt2_tiny_decoder_6_layers"
+  --base_encoder_model="Lakoc/ebranchformer_16l_512h"
+  --base_decoder_model="Lakoc/gpt2_8l_512h"
   --ctc_weight="0.3"
   --decoder_pos_emb_fixed
   --expect_2d_input
