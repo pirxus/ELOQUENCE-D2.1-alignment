@@ -1,11 +1,11 @@
 #!/usr/bin/bash
 #SBATCH --job-name TED
-#SBATCH --account OPEN-28-57
+#SBATCH --account OPEN-28-58
 #SBATCH --partition qgpu
 #SBATCH --nodes=4
 #SBATCH --ntasks=4
 #SBATCH --ntasks-per-node=1
-#SBATCH --gpus=32
+#SBATCH --gpus-per-node 8
 #SBATCH --cpus-per-task=128
 #SBATCH --time 2-00:00:00
 #SBATCH --output=/mnt/proj1/open-28-58/lakoc/huggingface_asr/outputs/ebranchformer_english_small_normalized.out
