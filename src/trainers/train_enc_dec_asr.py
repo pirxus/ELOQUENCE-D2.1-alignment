@@ -16,10 +16,7 @@ from utilities.collators import SpeechCollatorWithPadding
 from utilities.data_utils import get_dataset
 from utilities.eval_utils import compute_metrics
 from utilities.general_utils import do_evaluate, do_generate
-from utilities.model_utils import (
-    handle_whisper_generation_config,
-    instantiate_aed_model,
-)
+from utilities.model_utils import instantiate_aed_model
 from utilities.training_arguments import (
     DataTrainingArguments,
     GeneralTrainingArguments,
