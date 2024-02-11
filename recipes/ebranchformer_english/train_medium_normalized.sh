@@ -1,11 +1,11 @@
 #!/usr/bin/bash
 #SBATCH --job-name TED
-#SBATCH --account OPEN-28-57
+#SBATCH --account OPEN-28-58
 #SBATCH --partition qgpu
 #SBATCH --nodes=6
 #SBATCH --ntasks=6
 #SBATCH --ntasks-per-node=1
-#SBATCH --gpus=48
+#SBATCH --gpus-per-node 8
 #SBATCH --cpus-per-task=128
 #SBATCH --time 2-00:00:00
 #SBATCH --output=/mnt/proj1/open-28-58/lakoc/huggingface_asr/outputs/ebranchformer_english_medium_normalized.out
@@ -62,6 +62,8 @@ args=(
   --dataset_name="/scratch/project/open-28-57/lakoc/processed_dataset_full"
   --writer_batch_size="500"
   --test_splits wsj_test fisher_swbd_dev voxpopuli_test tedlium3_test librispeech_test.clean librispeech_test.other commonvoice_en_test fleurs_test
+  --validation_slice="20%"
+  --validation_slice_seed=42
 
   # Preprocessing related arguments
   --data_preprocessing_config="${RECIPE_DIR}/data_preprocessing.json"
