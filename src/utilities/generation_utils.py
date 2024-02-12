@@ -49,12 +49,16 @@ def save_nbests(
 def save_predictions(
     tokenizer: PreTrainedTokenizer, predictions: PredictionOutput, path: str, text_transforms: Optional[Callable] = None
 ):
+    """Save predictions to a csv file and sclite files to evaluate wer."""
     pred_ids = predictions.predictions
 
     label_ids = predictions.label_ids
     label_ids[label_ids == -100] = tokenizer.pad_token_id
 
-    pred_str = [text_transforms(pred) for pred in tokenizer.batch_decode(pred_ids, skip_special_tokens=True)]
+    pred_str = [
+        text_transforms(pred) if text_transforms else pred
+        for pred in tokenizer.batch_decode(pred_ids, skip_special_tokens=True)
+    ]
     label_str = [label if label else "-" for label in tokenizer.batch_decode(label_ids, skip_special_tokens=True)]
     df = pd.DataFrame({"label": label_str, "prediction": pred_str})
     df.to_csv(path, index=False)
