@@ -82,6 +82,7 @@ if __name__ == "__main__":
         sys.exit(0)
 
     # 2. Instantiate model
+    mp.set_start_method("spawn", force=True)
     device = "cuda" if torch.cuda.is_available() else "cpu"
     pipeline = Speech2Text.from_pretrained(model_args.from_pretrained, lang_sym="<en>", beam_size=1, device=device)
 
@@ -107,7 +108,8 @@ if __name__ == "__main__":
         # 4a. Init array to store predictions and labels and manager
         hyp_list = manager.list()
         label_list = manager.list()
-        pool = mp.get.Pool(gen_args.num_workers)
+        # pylint: disable=not-callable
+        pool = mp.Pool(gen_args.num_workers)
 
         # 4b. Process samples in parallel
         for result in tqdm(
