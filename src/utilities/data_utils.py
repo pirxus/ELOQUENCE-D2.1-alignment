@@ -124,6 +124,15 @@ def transforms_unfinished_words_to_unks(example: str, label_column: str) -> Dict
     return {label_column: re.sub(r"\(?\w+-\)?", "([unk])", example)}
 
 
+tedlium_contractions = [" 's", " 't", " 're", " 've", " 'm", " 'll", " 'd", " 'clock", " 'all"]
+
+
+def fix_tedlium_apostrophes(example: str, label_column: str) -> Dict[str, str]:
+    for contraction in tedlium_contractions:
+        example = example.replace(contraction, contraction[1:])
+    return {label_column: example.replace(r"\s+ '", r" '")}
+
+
 def filter_empty_transcriptions(example: str, _: str) -> bool:
     """Filters out empty transcriptions."""
     return example != ""
