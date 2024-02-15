@@ -129,6 +129,11 @@ def filter_empty_transcriptions(example: str) -> bool:
     return example != ""
 
 
+def filter_tedlium_empty_labels(example: str) -> bool:
+    """Filters out empty transcriptions."""
+    return example != "ignore_time_segment_in_scoring"
+
+
 def whisper_normalize_english(example: str, label_column: str) -> Dict[str, str]:
     """Normalizes text using adapted whisper normalizer."""
     return {label_column: whisper_normalizer(example)}
