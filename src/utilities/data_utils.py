@@ -124,7 +124,7 @@ def transforms_unfinished_words_to_unks(example: str, label_column: str) -> Dict
     return {label_column: re.sub(r"\(?\w+-\)?", "([unk])", example)}
 
 
-def filter_empty_transcriptions(example: str) -> bool:
+def filter_empty_transcriptions(example: str, _: str) -> bool:
     """Filters out empty transcriptions."""
     return example != ""
 
@@ -209,7 +209,6 @@ def prepare_dataset(
     train_split: str,
     text_transformations: Optional[List[str]],
     split_long_segments_to_chunks: bool,
-    filter_empty_labels: bool,
     sampling_rate: int,
     max_input_len: float,
     min_input_len: float,
@@ -290,43 +289,37 @@ def prepare_dataset(
     # 2. Preprocess label columns
     if text_column_name is not None and text_transformations is not None:
         for transformation_name in text_transformations:
+            if transformation_name.startswith("filter_"):
+                process_by = "filter"
+                fn_kwargs = {}
+            else:
+                process_by = "map"
+                fn_kwargs = {"label_column": text_column_name}
             if transformation_name.endswith("_train"):
                 if train_split is not None:
                     transformation = globals()[re.sub("_train", "", transformation_name)]
                     dataset[train_split] = distributed_process(
                         dataset[train_split],
-                        process_by="map",
+                        process_by=process_by,
                         function=transformation,
                         input_columns=[text_column_name],
                         num_proc=preprocessing_num_workers,
                         writer_batch_size=writer_batch_size,
-                        fn_kwargs={"label_column": text_column_name},
+                        fn_kwargs=fn_kwargs,
                         desc=f"Applying {transformation_name} transformation",
                     )
             else:
                 transformation = globals()[transformation_name]
                 dataset = distributed_process(
                     dataset,
-                    process_by="map",
+                    process_by=process_by,
                     function=transformation,
                     input_columns=[text_column_name],
                     num_proc=preprocessing_num_workers,
                     writer_batch_size=writer_batch_size,
-                    fn_kwargs={"label_column": text_column_name},
+                    fn_kwargs=fn_kwargs,
                     desc=f"Applying {transformation_name} transformation",
                 )
-
-        # 3. Remove segments with empty annotations
-        if filter_empty_labels:
-            dataset = distributed_process(
-                dataset,
-                process_by="filter",
-                function=filter_empty_transcriptions,
-                input_columns=[text_column_name],
-                writer_batch_size=writer_batch_size,
-                num_proc=preprocessing_num_workers,
-                desc="Filtering out empty transcriptions",
-            )
 
     logger.info("Casting audio column to Audio, and length column to float32")
     feature_types = dataset[list(dataset.keys())[0]].features
@@ -397,7 +390,6 @@ def load_multiple_datasets(
     global_train_split: str,
     global_validation_split: str,
     split_long_segments_to_chunks: bool,
-    filter_empty_labels: bool,
 ) -> DatasetDict:
     """Loads multiple datasets, preprocess them and join to single dataset instance."""
     with open(config_path) as config_handle:
@@ -448,7 +440,6 @@ def load_multiple_datasets(
             max_input_len=max_input_len,
             min_input_len=min_input_len,
             split_long_segments_to_chunks=split_long_segments_to_chunks,
-            filter_empty_labels=filter_empty_labels,
             reshuffle_at_start=dataset_config.get("reshuffle_at_start", False),
         )
 
@@ -529,7 +520,6 @@ def get_dataset(
     validation_split: str,
     text_transformations: Optional[List[str]],
     split_long_segments_to_chunks: bool,
-    filter_empty_labels: bool,
     validation_slice_str: str,
     cut_validation_from_train: bool,
     seed: Optional[int],
@@ -550,7 +540,6 @@ def get_dataset(
             global_train_split=train_split,
             global_validation_split=validation_split,
             split_long_segments_to_chunks=split_long_segments_to_chunks,
-            filter_empty_labels=filter_empty_labels,
         )
     else:
         with DistributedContext() as context:
@@ -582,7 +571,6 @@ def get_dataset(
             min_input_len=min_input_len,
             text_transformations=text_transformations,
             split_long_segments_to_chunks=split_long_segments_to_chunks,
-            filter_empty_labels=filter_empty_labels,
             reshuffle_at_start=reshuffle_at_start,
         )
 
