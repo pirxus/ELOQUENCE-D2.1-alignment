@@ -28,7 +28,11 @@ class FeatureExtractionInitModifier(type):
         # Modify the __init__ method dynamically
         def new_init(self, *args, **kwargs):
             original_init(self, *args, **kwargs)
-            if self.config.expect_2d_input:
+            if hasattr(self.config, "num_mel_bins"):
+                if not hasattr(self.config, "expect_2d_input"):
+                    self.config.expect_2d_input = True
+                    self.config.second_dim_input_size = self.config.num_mel_bins
+            if hasattr(self.config, "expect_2d_input") and self.config.expect_2d_input:
                 getattr(self, self.base_model_prefix).feature_extractor = Conv2dFeatureExtractor(self.config)
 
         # Replace the __init__ method with the modified version
