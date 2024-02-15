@@ -45,7 +45,6 @@ class GenArgs(GenerationArguments):
 
 
 if __name__ == "__main__":
-    mp.set_start_method("spawn")
     logging.set_verbosity_debug()
     logger = logging.get_logger("transformers")
     parser = HfArgumentParser((ModelArguments, DataTrainingArguments, GeneralTrainingArguments, GenArgs))
@@ -108,7 +107,7 @@ if __name__ == "__main__":
         # 4a. Init array to store predictions and labels and manager
         hyp_list = manager.list()
         label_list = manager.list()
-        pool = manager.Pool(gen_args.num_workers)
+        pool = mp.get.Pool(gen_args.num_workers)
 
         # 4b. Process samples in parallel
         for result in tqdm(
