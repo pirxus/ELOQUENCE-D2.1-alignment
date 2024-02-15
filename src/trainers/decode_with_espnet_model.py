@@ -23,12 +23,12 @@ from utilities.training_arguments import (
 
 
 # Function to process samples and save predictions with corresponding labels
-def process_sample(sample, pipeline, callable_transform):
+def process_sample(sample, pipeline, callable_transform, text_column):
     hypothesis = pipeline(sample["audio"]["array"])
     prediction = hypothesis[0][0]
     if callable_transform:
         prediction = callable_transform(prediction)
-    return prediction, sample["transcription"]
+    return prediction, sample[text_column]
 
 
 @dataclass
@@ -113,7 +113,15 @@ if __name__ == "__main__":
 
         # 4b. Process samples in parallel
         for result in tqdm(
-            pool.imap(partial(process_sample, pipeline=pipeline, callable_transform=callable_transform), split),
+            pool.imap(
+                partial(
+                    process_sample,
+                    pipeline=pipeline,
+                    callable_transform=callable_transform,
+                    text_column=data_args.text_column_name,
+                ),
+                split,
+            ),
             total=len(split),
             desc=f"Processing samples in {split_name} dataset",
         ):
