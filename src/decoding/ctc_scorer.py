@@ -174,7 +174,7 @@ class CTCPrefixScoreTH(object):
             )
 
         for si in range(n_bh):
-            log_psi[si, self.eos] = max(log_psi[si, self.eos], r_sum[self.end_frames[si // n_hyps], si])
+            log_psi[si, self.eos] = r_sum[self.end_frames[si // n_hyps], si]
 
         # exclude blank probs
         log_psi[:, self.blank] = self.logzero
@@ -293,7 +293,8 @@ class CTCRescorerLogitsProcessor(LogitsProcessor):
             self.ctc_states = self.ctc_prefix_scorer.index_select_state(
                 self.ctc_states, input_ids[:, -1].reshape(-1, self.num_beams)
             )
-        ctc_scores, ctc_states = self.ctc_prefix_scorer(input_ids, self.ctc_states)
+        local_best_scores, local_best_ids = torch.topk(scores, scores.size(1), dim=1)
+        ctc_scores, ctc_states = self.ctc_prefix_scorer(input_ids, self.ctc_states, local_best_ids)
         self.ctc_states = ctc_states
         next_token_scores = (1 - self.ctc_weight) * scores + self.ctc_weight * ctc_scores
         # return scores
