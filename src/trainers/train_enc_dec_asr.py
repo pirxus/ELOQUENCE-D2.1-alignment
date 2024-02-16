@@ -3,6 +3,7 @@ import sys
 
 from transformers import (
     AutoFeatureExtractor,
+    AutoModelForCausalLM,
     AutoTokenizer,
     HfArgumentParser,
     Seq2SeqTrainer,
@@ -81,12 +82,12 @@ if __name__ == "__main__":
         ctc_weight=gen_args.decoding_ctc_weight,
         ctc_margin=gen_args.ctc_margin,
         lm_weight=gen_args.lm_weight,
-        lm_model=gen_args.lm_model,
+        lm_model=AutoModelForCausalLM.from_pretrained(gen_args.lm_model) if gen_args.lm_model else None,
         space_token_id=gen_args.space_token_id,
         apply_eos_space_trick=gen_args.apply_eos_space_trick,
         eos_space_trick_weight=gen_args.eos_space_trick_weight,
     )
-    logger.info(f"Model updating generation config:\n {str(gen_config)}")
+    logger.info(f"Model updating generation config:\n")
     training_args.generation_max_length = gen_args.max_length
     training_args.generation_num_beams = gen_args.num_beams
 
