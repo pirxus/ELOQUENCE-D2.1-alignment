@@ -3,9 +3,9 @@ from transformers import AutoModelForCausalLM, LogitsProcessor
 
 
 class LMRescorerLogitsProcessor(LogitsProcessor):
-    def __init__(self, lm_weight: float, lm_model: str):
+    def __init__(self, lm_weight: float, lm_model: str, device: torch.device):
         super().__init__()
-        self.lm_model = AutoModelForCausalLM.from_pretrained(lm_model)
+        self.lm_model = AutoModelForCausalLM.from_pretrained(lm_model, device=device)
         self.lm_weight = lm_weight
 
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:

@@ -433,7 +433,9 @@ class JointCTCAttentionEncoderDecoder(SpeechEncoderDecoderModel):
         if hasattr(generation_config, "lm_weight") and generation_config.lm_weight > 0:
             if not hasattr(generation_config, "lm_model"):
                 raise ValueError("If `lm_weight` is specified, make sure that `lm_model` is defined.")
-            processors.append(LMRescorerLogitsProcessor(generation_config.lm_weight, generation_config.lm_model))
+            processors.append(
+                LMRescorerLogitsProcessor(generation_config.lm_weight, generation_config.lm_model, device=self.device)
+            )
         return processors
 
     def _prepare_encoder_decoder_kwargs_for_generation(
