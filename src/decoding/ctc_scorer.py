@@ -1,14 +1,7 @@
 # pylint: skip-file
 # Copied from: https://github.com/espnet/espnet/blob/master/espnet/nets/ctc_prefix_score.py
 import torch
-from transformers import GenerationConfig, LogitsProcessor
-
-
-class GenerationConfigWithCTC(GenerationConfig):
-    def __init__(self, ctc_weight=0.0, ctc_margin=0, **kwargs):
-        super().__init__(**kwargs)
-        self.ctc_weight = ctc_weight
-        self.ctc_margin = ctc_margin
+from transformers import LogitsProcessor
 
 
 class CTCPrefixScoreTH(object):
@@ -273,6 +266,9 @@ class CTCRescorerLogitsProcessor(LogitsProcessor):
         ctc_margin: int,
         ctc_weight: float,
         num_beams: int,
+        space_token_id: int,
+        apply_eos_space_trick: bool,
+        eos_space_trick_weight: float,
     ):
         super().__init__()
         self.pad_token_id = pad_token_id
@@ -286,6 +282,10 @@ class CTCRescorerLogitsProcessor(LogitsProcessor):
         self.ctc_weight = ctc_weight
         self.ctc_states = None
         self.num_beams = num_beams
+        self.eos_token_id = eos_token_id
+        self.apply_eos_space_trick = apply_eos_space_trick
+        self.space_token_id = space_token_id
+        self.eos_space_trick_weight = eos_space_trick_weight
 
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
         scores[:, self.pad_token_id] = self.ctc_prefix_scorer.logzero
@@ -297,7 +297,23 @@ class CTCRescorerLogitsProcessor(LogitsProcessor):
         ctc_scores, ctc_states = self.ctc_prefix_scorer(input_ids, self.ctc_states, local_best_ids)
         self.ctc_states = ctc_states
         next_token_scores = (1 - self.ctc_weight) * scores + self.ctc_weight * ctc_scores
-        # return scores
+        if self.apply_eos_space_trick:
+            space_eos_conflict = torch.logical_and(
+                scores.argmax(dim=1) == self.eos_token_id, ctc_scores.argmax(dim=1) == self.space_token_id
+            )
+            if space_eos_conflict.any():
+                apply_trick_on = torch.logical_and(
+                    torch.logical_and(
+                        space_eos_conflict,
+                        next_token_scores[:, self.eos_token_id] < next_token_scores[:, self.space_token_id],
+                    ),
+                    self.eos_space_trick_weight * next_token_scores[:, self.eos_token_id]
+                    > next_token_scores[:, self.space_token_id],
+                )
+                if apply_trick_on.any():
+                    next_token_scores[apply_trick_on, self.eos_token_id] = (
+                        next_token_scores[apply_trick_on, self.eos_token_id] * self.eos_space_trick_weight
+                    )
         return next_token_scores
 
 

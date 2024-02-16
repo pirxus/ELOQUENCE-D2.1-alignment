@@ -10,7 +10,7 @@ from transformers import (
 )
 from transformers.utils import logging
 
-from decoding.ctc_scorer import GenerationConfigWithCTC
+from decoding.config import GenerationConfigCustom
 from utilities.callbacks import init_callbacks
 from utilities.collators import SpeechCollatorWithPadding
 from utilities.data_utils import get_dataset
@@ -69,7 +69,7 @@ if __name__ == "__main__":
     model = instantiate_aed_model(model_args, tokenizer, feature_extractor)
 
     # 4. Update generation config
-    gen_config = GenerationConfigWithCTC(
+    gen_config = GenerationConfigCustom(
         bos_token_id=tokenizer.bos_token_id,
         pad_token_id=tokenizer.pad_token_id,
         decoder_start_token_id=tokenizer.bos_token_id,
@@ -80,6 +80,11 @@ if __name__ == "__main__":
         num_beams=gen_args.num_beams,
         ctc_weight=gen_args.decoding_ctc_weight,
         ctc_margin=gen_args.ctc_margin,
+        lm_weight=gen_args.lm_weight,
+        lm_model=gen_args.lm_model,
+        space_token_id=gen_args.space_token_id,
+        apply_eos_space_trick=gen_args.apply_eos_space_trick,
+        eos_space_trick_weight=gen_args.eos_space_trick_weight,
     )
     logger.info(f"Model updating generation config:\n {str(gen_config)}")
     training_args.generation_max_length = gen_args.max_length

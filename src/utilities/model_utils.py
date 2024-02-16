@@ -18,7 +18,7 @@ from transformers import (
 )
 from transformers.utils import logging
 
-from decoding.ctc_scorer import GenerationConfigWithCTC
+from decoding.config import GenerationConfigCustom
 from models.auto_wrappers import CustomAutoModelForCTC, CustomAutoModelForPretraining
 from models.ctc_encoder_plus_autoregressive_decoder import (
     JointCTCAttentionEncoderDecoder,
@@ -194,7 +194,7 @@ def handle_whisper_generation_config(
     model_args: ModelArguments,
     model: WhisperForConditionalGeneration,
     tokenizer: WhisperTokenizer,
-    gen_config: GenerationConfigWithCTC,
+    gen_config: GenerationConfigCustom,
 ):
     if model_args.whisper_task and model_args.whisper_language:
         gen_config.suppress_tokens = []

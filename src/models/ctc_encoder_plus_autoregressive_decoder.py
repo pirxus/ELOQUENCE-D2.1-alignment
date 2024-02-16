@@ -22,11 +22,9 @@ from transformers.models.speech_encoder_decoder.modeling_speech_encoder_decoder 
 )
 from transformers.utils import logging
 
-from decoding.ctc_scorer import (
-    CTCRescorerLogitsProcessor,
-    GenerationConfigWithCTC,
-    LogSoftmaxProcessor,
-)
+from decoding.config import GenerationConfigCustom
+from decoding.ctc_scorer import CTCRescorerLogitsProcessor, LogSoftmaxProcessor
+from decoding.shallow_fussion import LMRescorerLogitsProcessor
 from models.auto_wrappers import CustomAutoModelForCTC
 from models.decoders.multi_head_gpt2 import GPT2LMMultiHeadModel, GPT2MultiHeadConfig
 from models.decoders.residual_clasiffier_gpt2 import (
@@ -405,7 +403,7 @@ class JointCTCAttentionEncoderDecoder(SpeechEncoderDecoderModel):
 
     def _get_logits_processor(
         self,
-        generation_config: GenerationConfigWithCTC,
+        generation_config: GenerationConfigCustom,
         input_ids_seq_length: int,
         encoder_input_ids: torch.LongTensor,
         prefix_allowed_tokens_fn: Callable[[int, torch.Tensor], List[int]],
@@ -427,8 +425,15 @@ class JointCTCAttentionEncoderDecoder(SpeechEncoderDecoderModel):
                 self.generation_config.ctc_margin,
                 self.generation_config.ctc_weight,
                 self.generation_config.num_beams,
+                self.generation_config.space_token_id,
+                self.generation_config.apply_eos_space_trick,
+                self.generation_config.eos_space_trick_weight,
             )
             processors.append(self.ctc_rescorer)
+        if hasattr(generation_config, "lm_weight") and generation_config.lm_weight > 0:
+            if not hasattr(generation_config, "lm_model"):
+                raise ValueError("If `lm_weight` is specified, make sure that `lm_model` is defined.")
+            processors.append(LMRescorerLogitsProcessor(generation_config.lm_weight, generation_config.lm_model))
         return processors
 
     def _prepare_encoder_decoder_kwargs_for_generation(

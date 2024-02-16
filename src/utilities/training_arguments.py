@@ -101,8 +101,8 @@ class GenerationArguments:
     """Joint decoding related arguments."""
     decoding_ctc_weight: Optional[float] = field(default=0.0, metadata={"help": "CTC weight to bias hypothesis."})
     ctc_margin: Optional[float] = field(default=0, metadata={"help": "Margin to stop generation."})
-    external_lm: Optional[str] = field(default=None, metadata={"help": "Path to external LM."})
-    external_lm_weight: Optional[float] = field(default=0.0, metadata={"help": "Weight of external LM."})
+    lm_model: Optional[str] = field(default=None, metadata={"help": "Path to external LM."})
+    lm_weight: Optional[float] = field(default=0.0, metadata={"help": "Weight of external LM."})
     """Generation logging related arguments."""
     wandb_predictions_to_save: Optional[int] = field(
         default=100, metadata={"help": "Number of predictions to save to wandb."}
@@ -113,6 +113,9 @@ class GenerationArguments:
     post_process_predicitons: Optional[bool] = field(
         default=False, metadata={"help": "Whether to post process predictions."}
     )
+    apply_eos_space_trick: Optional[bool] = field(default=False, metadata={"help": "Whether to apply eos space trick."})
+    eos_space_trick_weight: Optional[float] = field(default=0.0, metadata={"help": "Weight of eos space trick."})
+    space_token_id: Optional[int] = field(default=-1, metadata={"help": "Space token id."})
 
 
 @dataclass
