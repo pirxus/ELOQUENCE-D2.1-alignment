@@ -3,9 +3,11 @@ from transformers import AutoModelForCausalLM, LogitsProcessor
 
 
 class LMRescorerLogitsProcessor(LogitsProcessor):
+    """Logits Processor to rescore the next token scores with a language model."""
+
     def __init__(self, lm_weight: float, lm_model: str, device: torch.device):
         super().__init__()
-        self.lm_model = AutoModelForCausalLM.from_pretrained(lm_model, device=device)
+        self.lm_model = AutoModelForCausalLM.from_pretrained(lm_model).to(device)
         self.lm_weight = lm_weight
 
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
