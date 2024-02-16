@@ -43,7 +43,8 @@ args=(
   --preprocessing_num_workers="32"
   --dataset_name="/scratch/project/open-28-57/lakoc/processed_dataset_full"
   --writer_batch_size="500"
-  --test_splits fleurs_test commonvoice_en_test
+  --test_splits wsj_test fisher_swbd_dev voxpopuli_test tedlium3_test librispeech_test.clean librispeech_test.other commonvoice_en_test fleurs_test
+  --text_transformations filter_empty_labels
 
   # Preprocessing related arguments
   --data_preprocessing_config="${RECIPE_DIR}/data_preprocessing.json"
@@ -55,7 +56,6 @@ args=(
   --expect_2d_input
 
   # Generation related arguments
-  --filter_empty_labels
   --num_beams="10"
   --max_length="512"
   --predict_with_generate
