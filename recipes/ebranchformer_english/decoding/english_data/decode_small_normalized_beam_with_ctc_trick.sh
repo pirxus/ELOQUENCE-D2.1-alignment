@@ -31,7 +31,7 @@ cd $WORK_DIR
 args=(
   # General training arguments
   --output_dir=$EXPERIMENT_PATH
-  --per_device_eval_batch_size="8"
+  --per_device_eval_batch_size="32"
   --dataloader_num_workers="24"
   --do_evaluate
 
@@ -43,8 +43,7 @@ args=(
   --preprocessing_num_workers="32"
   --dataset_name="/scratch/project/open-28-57/lakoc/processed_dataset_full"
   --writer_batch_size="500"
-  --test_splits wsj_test fisher_swbd_dev voxpopuli_test tedlium3_test librispeech_test.clean librispeech_test.other commonvoice_en_test fleurs_test
-  --text_transformations filter_empty_labels
+  --test_splits wsj_test fleurs_test  voxpopuli_test tedlium3_test librispeech_test.clean librispeech_test.other fisher_swbd_dev commonvoice_en_test
 
   # Preprocessing related arguments
   --data_preprocessing_config="${RECIPE_DIR}/data_preprocessing.json"
