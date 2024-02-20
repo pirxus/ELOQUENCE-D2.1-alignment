@@ -5,9 +5,9 @@
 #SBATCH --time 01:00:00
 #SBATCH --nodes=1
 #SBATCH --gpus=1
-#SBATCH --output=/mnt/proj1/open-28-58/lakoc/huggingface_asr/outputs/decoding_greedy_tedlium_regularized_small.out
+#SBATCH --output=/mnt/proj1/open-28-58/lakoc/huggingface_asr/outputs/decoding_greedy_logit_averaging_tedlium_regularized_small.out
 
-EXPERIMENT="decoding_greedy_tedlium_regularized_small"
+EXPERIMENT="decoding_greedy_logit_averaging_tedlium_regularized_small"
 PROJECT="regularizations_english_corpus"
 WORK_DIR="/mnt/proj1/open-28-58/lakoc/huggingface_asr"
 RECIPE_DIR="${WORK_DIR}/recipes/ebranchformer_english"
