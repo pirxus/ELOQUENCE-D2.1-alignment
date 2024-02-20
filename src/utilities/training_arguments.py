@@ -42,6 +42,11 @@ class ModelArguments:
     whisper_language: Optional[str] = field(default=None, metadata={"help": "Language of the model."})
     whisper_task: Optional[str] = field(default=None, metadata={"help": "Task of the model."})
 
+    """Token mixing specific arguments."""
+    finetune_mixing_mechanism: Optional[str] = field(
+        default=None, metadata={"help": "Type of mixing mechanism to use for finetuning."}
+    )
+
 
 @dataclass
 class GeneralTrainingArguments(Seq2SeqTrainingArguments):

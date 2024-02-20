@@ -20,10 +20,19 @@ from transformers import (
 from transformers.utils import logging
 
 from decoding.config import GenerationConfigCustom
-from models.auto_wrappers import CustomAutoModelForCTC, CustomAutoModelForPretraining
+from models.auto_wrappers import (
+    CustomAutoModelForCTC,
+    CustomAutoModelForPretraining,
+    CustomModelForCausalLM,
+)
 from models.ctc_encoder_plus_autoregressive_decoder import (
     JointCTCAttentionEncoderDecoder,
     JointCTCAttentionEncoderDecoderConfig,
+)
+from models.decoders.multi_head_gpt2 import GPT2LMMultiHeadModel, GPT2MultiHeadConfig
+from models.decoders.multi_head_gpt2_mixing import (
+    GPT2LMMultiHeadModelMixing,
+    GPT2MultiHeadMixingConfig,
 )
 from models.encoders.e_branchformer import (
     BestRQEBranchformerConfig,
@@ -185,6 +194,20 @@ def instantiate_aed_model(
             decoder_pretrained_model_name_or_path=model_args.base_decoder_model,
             **base_model_config,
         )
+    if model_args.finetune_mixing_mechanism:
+        if not isinstance(model.decoder, GPT2LMMultiHeadModel):
+            raise ValueError("The model decoder must be an instance of GPT2LMMultiHeadModel")
+        old_config = model.decoder.config
+        new_config = GPT2MultiHeadMixingConfig(**old_config.to_dict(), mixing_mode=model_args.finetune_mixing_mechanism)
+        new_decoder = CustomModelForCausalLM.from_config(new_config)
+        new_decoder.load_state_dict(model.decoder.state_dict(), strict=False)
+
+        model.decoder = new_decoder
+        # Freeze the weights of the model decoder, except for the mixing mechanism
+        for name, param in model.named_parameters():
+            if "lm_mixing" not in name:
+                param.requires_grad = False
+        logger.info("Reinstantiating the model decoder with the model with the model supporting mixing mechanism.")
     return model
 
 
