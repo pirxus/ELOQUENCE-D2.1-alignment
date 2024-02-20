@@ -58,7 +58,6 @@ args=(
   --max_length="512"
   --predict_with_generate
   --decoding_ctc_weight="0.3"
-  --space_token_id="5"
   --lm_model="Lakoc/TED_CLM_gpt2_tedlium4"
   --lm_weight="0.2"
 )

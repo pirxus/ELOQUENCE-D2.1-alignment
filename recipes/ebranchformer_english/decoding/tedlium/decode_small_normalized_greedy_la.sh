@@ -58,6 +58,7 @@ args=(
   --max_length="512"
   --predict_with_generate
   --decoding_ctc_weight="0"
+  --config_overrides="decoder_average_logits=True"
 )
 
 torchrun --standalone --nnodes=1 --nproc-per-node=$SLURM_GPUS_ON_NODE src/trainers/train_enc_dec_asr.py "${args[@]}"

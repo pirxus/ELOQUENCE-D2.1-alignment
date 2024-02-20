@@ -61,12 +61,7 @@ def average_checkpoints(experiment_dir: str) -> str:
     return dst_path
 
 
-def fetch_config(
-    enc_config_path: str, dec_config_path: str, base_config: Dict, config_overrides: str
-) -> PretrainedConfig:
-    enc_config = AutoConfig.from_pretrained(enc_config_path)
-    dec_config = AutoConfig.from_pretrained(dec_config_path)
-    config = JointCTCAttentionEncoderDecoderConfig.from_encoder_decoder_configs(enc_config, dec_config)
+def fetch_config(config: PretrainedConfig, base_config: Dict, config_overrides: str) -> PretrainedConfig:
     if config_overrides is not None:
         logger.info(f"Overriding config: {config_overrides}")
         parsed_dict = dict(x.split("=") for x in config_overrides.split(","))
@@ -142,15 +137,17 @@ def instantiate_aed_model(
     # 4. Initialize seq2seq model
     if model_args.from_pretrained:
         config = AutoConfig.from_pretrained(model_args.from_pretrained)
-        config.update(base_model_config)
+        config = fetch_config(config, base_model_config, model_args.config_overrides)
         model_path = model_args.from_pretrained
         if model_args.average_checkpoints:
             model_path = average_checkpoints(model_path)
         model = AutoModelForSpeechSeq2Seq.from_pretrained(model_path, config=config)
     elif model_args.from_encoder_decoder_config:
+        enc_config = AutoConfig.from_pretrained(model_args.base_encoder_model)
+        dec_config = AutoConfig.from_pretrained(model_args.base_decoder_model)
+        config = JointCTCAttentionEncoderDecoderConfig.from_encoder_decoder_configs(enc_config, dec_config)
         config = fetch_config(
-            model_args.base_encoder_model,
-            model_args.base_decoder_model,
+            config,
             base_model_config,
             model_args.config_overrides,
         )
