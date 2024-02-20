@@ -5,9 +5,9 @@
 #SBATCH --time 01:00:00
 #SBATCH --nodes=1
 #SBATCH --gpus=1
-#SBATCH --output=/mnt/proj1/open-28-58/lakoc/huggingface_asr/outputs/3_tedlium_regularized_small.out
+#SBATCH --output=/mnt/proj1/open-28-58/lakoc/huggingface_asr/outputs/decoding_beam_ctc_tedlium_regularized_small.out
 
-EXPERIMENT="decoding_greedy_la0.3_tedlium_regularized_small"
+EXPERIMENT="decoding_beam_ctc_tedlium_regularized_small"
 PROJECT="regularizations_english_corpus"
 WORK_DIR="/mnt/proj1/open-28-58/lakoc/huggingface_asr"
 RECIPE_DIR="${WORK_DIR}/recipes/ebranchformer_english"
@@ -29,7 +29,7 @@ cd $WORK_DIR
 args=(
   # General training arguments
   --output_dir=$EXPERIMENT_PATH
-  --per_device_eval_batch_size="64"
+  --per_device_eval_batch_size="16"
   --dataloader_num_workers="24"
   --do_evaluate
 
@@ -57,10 +57,10 @@ args=(
   --decoder_pos_emb_fixed
 
   # Generation related arguments
-  --num_beams="1"
+  --num_beams="40"
   --max_length="512"
   --predict_with_generate
-  --decoding_ctc_weight="0"
+  --decoding_ctc_weight="0.3"
 )
 
 torchrun --standalone --nnodes=1 --nproc-per-node=$SLURM_GPUS_ON_NODE src/trainers/train_enc_dec_asr.py "${args[@]}"
