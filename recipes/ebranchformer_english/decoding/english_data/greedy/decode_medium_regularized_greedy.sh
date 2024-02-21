@@ -5,13 +5,13 @@
 #SBATCH --time 01:00:00
 #SBATCH --nodes=1
 #SBATCH --gpus=4
-#SBATCH --output=/mnt/proj1/open-28-58/lakoc/huggingface_asr/outputs/english_model_medium_regularized_greedy.out
+#SBATCH --output=/mnt/proj1/open-28-58/lakoc/huggingface_asr/outputs/regularized_models_decoding/english_model_medium_regularized_greedy.out
 
 EXPERIMENT="english_model_medium_regularized_greedy"
 PROJECT="regularizations_english_corpus"
 WORK_DIR="/mnt/proj1/open-28-58/lakoc/huggingface_asr"
 RECIPE_DIR="${WORK_DIR}/recipes/ebranchformer_english"
-EXPERIMENT_PATH="${WORK_DIR}/experiments/${EXPERIMENT}"
+EXPERIMENT_PATH="${WORK_DIR}/experiments/regularized_models_decoding/${EXPERIMENT}"
 HF_HOME="/scratch/project/open-28-57/lakoc/huggingface_cache"
 
 
@@ -23,8 +23,6 @@ export WANDB_RUN_ID="${EXPERIMENT}"
 
 conda deactivate
 source activate loco_asr
-
-EXPERIMENT_PATH="${WORK_DIR}/experiments/${EXPERIMENT}"
 
 cd $WORK_DIR
 
@@ -52,7 +50,7 @@ args=(
   # Model related arguments
   --tokenizer_name="Lakoc/english_corpus_uni5000_normalized"
   --feature_extractor_name="Lakoc/log_80mel_extractor_16k"
-  --from_pretrained="/mnt/proj1/open-28-58/lakoc/huggingface_asr/experiments/ebranchformer_english_medium_regularized_normalized/checkpoint-386100"
+  --from_pretrained="/mnt/proj1/open-28-58/lakoc/huggingface_asr/experiments/ebranchformer_english_medium_normalized_regularized58_v2/checkpoint-231248"
   --expect_2d_input
 
   # Generation related arguments
