@@ -133,7 +133,7 @@ def fix_tedlium_apostrophes(example: str, label_column: str) -> Dict[str, str]:
     return {label_column: example.replace(r"\s+ '", r" '")}
 
 
-def filter_empty_transcriptions(example: str, _: str) -> bool:
+def filter_empty_transcriptions(example: str) -> bool:
     """Filters out empty transcriptions."""
     return example != ""
 
