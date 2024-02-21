@@ -5,13 +5,13 @@
 #SBATCH --time 01:00:00
 #SBATCH --nodes=1
 #SBATCH --gpus=4
-#SBATCH --output=/mnt/proj1/open-28-58/lakoc/huggingface_asr/outputs/regularized_models_decoding/english_model_medium_regularized_greedy.out
+#SBATCH --output=/mnt/proj1/open-28-58/lakoc/huggingface_asr/outputs/regularized_models_decoding/english_model_medium_regularized_greedy_ctc.out
 
-EXPERIMENT="english_model_medium_regularized_greedy"
+EXPERIMENT="english_model_medium_regularized_greedy_ctc"
 PROJECT="regularizations_english_corpus"
 WORK_DIR="/mnt/proj1/open-28-58/lakoc/huggingface_asr"
 RECIPE_DIR="${WORK_DIR}/recipes/ebranchformer_english"
-EXPERIMENT_PATH="${WORK_DIR}/experiments/regularized_models_decoding/greedy/${EXPERIMENT}"
+EXPERIMENT_PATH="${WORK_DIR}/experiments/regularized_models_decoding/greedy_ctc/${EXPERIMENT}"
 HF_HOME="/scratch/project/open-28-57/lakoc/huggingface_cache"
 
 
@@ -57,7 +57,7 @@ args=(
   --num_beams="1"
   --max_length="512"
   --predict_with_generate
-  --decoding_ctc_weight="0"
+  --decoding_ctc_weight="0.3"
 )
 
 torchrun --standalone --nnodes=1 --nproc-per-node=$SLURM_GPUS_ON_NODE src/trainers/train_enc_dec_asr.py "${args[@]}"

@@ -5,13 +5,13 @@
 #SBATCH --time 01:00:00
 #SBATCH --nodes=1
 #SBATCH --gpus=4
-#SBATCH --output=/mnt/proj1/open-28-58/lakoc/huggingface_asr/outputs/regularized_models_decoding/english_model_medium_regularized_greedy.out
+#SBATCH --output=/mnt/proj1/open-28-58/lakoc/huggingface_asr/outputs/regularized_models_decoding/english_model_medium_regularized_beam.out
 
-EXPERIMENT="english_model_medium_regularized_greedy"
+EXPERIMENT="english_model_medium_regularized_beam"
 PROJECT="regularizations_english_corpus"
 WORK_DIR="/mnt/proj1/open-28-58/lakoc/huggingface_asr"
 RECIPE_DIR="${WORK_DIR}/recipes/ebranchformer_english"
-EXPERIMENT_PATH="${WORK_DIR}/experiments/regularized_models_decoding/greedy/${EXPERIMENT}"
+EXPERIMENT_PATH="${WORK_DIR}/experiments/regularized_models_decoding/beam/${EXPERIMENT}"
 HF_HOME="/scratch/project/open-28-57/lakoc/huggingface_cache"
 
 
@@ -29,7 +29,7 @@ cd $WORK_DIR
 args=(
   # General training arguments
   --output_dir=$EXPERIMENT_PATH
-  --per_device_eval_batch_size="24"
+  --per_device_eval_batch_size="16"
   --dataloader_num_workers="24"
   --do_evaluate
 
@@ -54,7 +54,7 @@ args=(
   --expect_2d_input
 
   # Generation related arguments
-  --num_beams="1"
+  --num_beams="10"
   --max_length="512"
   --predict_with_generate
   --decoding_ctc_weight="0"
