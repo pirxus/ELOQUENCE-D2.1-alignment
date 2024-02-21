@@ -5,9 +5,9 @@
 #SBATCH --time 01:00:00
 #SBATCH --nodes=1
 #SBATCH --gpus=4
-#SBATCH --output=/mnt/proj1/open-28-58/lakoc/huggingface_asr/outputs/english_model_small_normalized_greedy_ctc_fixed.out
+#SBATCH --output=/mnt/proj1/open-28-58/lakoc/huggingface_asr/outputs/english_model_small_normalized_regularized_greedy_ctc.out
 
-EXPERIMENT="english_model_small_normalized_greedy_ctc_fixed"
+EXPERIMENT="english_model_small_normalized_regularized_greedy_ctc"
 PROJECT="regularizations_english_corpus"
 WORK_DIR="/mnt/proj1/open-28-58/lakoc/huggingface_asr"
 RECIPE_DIR="${WORK_DIR}/recipes/ebranchformer_english"
@@ -52,7 +52,7 @@ args=(
   # Model related arguments
   --tokenizer_name="Lakoc/english_corpus_uni5000_normalized"
   --feature_extractor_name="Lakoc/log_80mel_extractor_16k"
-  --from_pretrained="/mnt/proj1/open-28-58/lakoc/huggingface_asr/experiments/ebranchformer_english_small_normalized/checkpoint-150192"
+  --from_pretrained="/mnt/proj1/open-28-58/lakoc/huggingface_asr/experiments/ebranchformer_english_small_normalized_regularized/checkpoint-171648"
   --expect_2d_input
 
   # Generation related arguments
