@@ -1,13 +1,13 @@
 #!/usr/bin/bash
 #SBATCH --job-name TED
-#SBATCH --account OPEN-28-57
+#SBATCH --account OPEN-30-35
 #SBATCH --partition qgpu_exp
 #SBATCH --time 01:00:00
 #SBATCH --nodes=1
 #SBATCH --gpus=4
-#SBATCH --output=/mnt/proj1/open-28-58/lakoc/huggingface_asr/outputs/english_model_medium_regularized_greedy_decode_no_filer.out
+#SBATCH --output=/mnt/proj1/open-28-58/lakoc/huggingface_asr/outputs/english_model_medium_regularized_greedy.out
 
-EXPERIMENT="english_model_medium_regularized_greedy_decode_no_filer"
+EXPERIMENT="english_model_medium_regularized_greedy"
 PROJECT="regularizations_english_corpus"
 WORK_DIR="/mnt/proj1/open-28-58/lakoc/huggingface_asr"
 RECIPE_DIR="${WORK_DIR}/recipes/ebranchformer_english"
@@ -31,7 +31,7 @@ cd $WORK_DIR
 args=(
   # General training arguments
   --output_dir=$EXPERIMENT_PATH
-  --per_device_eval_batch_size="8"
+  --per_device_eval_batch_size="24"
   --dataloader_num_workers="24"
   --do_evaluate
 
@@ -40,10 +40,11 @@ args=(
   --min_duration_in_seconds="0.2"
   --length_column_name="input_len"
   --remove_unused_columns="False"
-  --preprocessing_num_workers="128"
-  --datasets_creation_config="${RECIPE_DIR}/datasets.json"
-  --writer_batch_size="1000"
-  --test_splits wsj_test fisher_swbd_dev voxpopuli_test tedlium3_test librispeech_test.clean librispeech_test.other commonvoice_en_test fleurs_test
+  --preprocessing_num_workers="16"
+  --dataset_name="/scratch/project/open-28-57/lakoc/processed_dataset_full"
+  --writer_batch_size="500"
+  --test_splits wsj_test voxpopuli_test tedlium3_test librispeech_test.clean librispeech_test.other fleurs_test commonvoice_en_test fisher_swbd_dev
+  --text_transformations filter_empty_transcriptions
 
   # Preprocessing related arguments
   --data_preprocessing_config="${RECIPE_DIR}/data_preprocessing.json"
@@ -55,7 +56,6 @@ args=(
   --expect_2d_input
 
   # Generation related arguments
-  --filter_empty_labels
   --num_beams="1"
   --max_length="512"
   --predict_with_generate
