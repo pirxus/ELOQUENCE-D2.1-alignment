@@ -29,7 +29,7 @@ cd $WORK_DIR
 args=(
   # General training arguments
   --output_dir=$EXPERIMENT_PATH
-  --per_device_eval_batch_size="32"
+  --per_device_eval_batch_size="8"
   --dataloader_num_workers="24"
   --do_evaluate
 
