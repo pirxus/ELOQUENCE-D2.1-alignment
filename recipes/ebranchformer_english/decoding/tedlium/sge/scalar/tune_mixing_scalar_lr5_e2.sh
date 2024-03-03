@@ -3,7 +3,7 @@
 #$ -q long.q@@gpu
 #$ -l ram_free=32G,mem_free=32G
 #$ -l scratch=2
-#$ -l gpu=1,gpu_ram=20G
+#$ -l gpu=1,gpu_ram=40G
 #$ -o /mnt/matylda5/ipoloka/projects/LoCo-ASR/experiments/english_mixing_scalar_lr5_e2.o
 #$ -e /mnt/matylda5/ipoloka/projects/LoCo-ASR/experiments/english_mixing_scalar_lr5_e2.e
 
@@ -50,7 +50,8 @@ cd $SRC_DIR
 args=(
   # General training arguments
   --output_dir=$EXPERIMENT_PATH
-  --per_device_train_batch_size="64"
+  --per_device_train_batch_size="256"
+  --auto_find_batch_size
   --per_device_eval_batch_size="32"
   --do_train
   --do_evaluate

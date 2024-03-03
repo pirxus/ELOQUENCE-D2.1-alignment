@@ -3,7 +3,7 @@
 #$ -q long.q@@gpu
 #$ -l ram_free=32G,mem_free=32G
 #$ -l scratch=2
-#$ -l gpu=1,gpu_ram=20G
+#$ -l gpu=1,gpu_ram=40G
 #$ -o /mnt/matylda5/ipoloka/projects/LoCo-ASR/experiments/english_mixing_scalar_lr5_e4.o
 #$ -e /mnt/matylda5/ipoloka/projects/LoCo-ASR/experiments/english_mixing_scalar_lr5_e4.e
 
