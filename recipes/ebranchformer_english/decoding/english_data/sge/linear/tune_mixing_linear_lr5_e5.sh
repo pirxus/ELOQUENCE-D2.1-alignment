@@ -25,12 +25,12 @@ source /mnt/matylda5/ipoloka/miniconda3/bin/activate /mnt/matylda5/ipoloka/envs/
 
 
 SRC_DIR="/mnt/matylda5/ipoloka/projects/huggingface_asr"
-EXPERIMENT="english_mixing_linear_lr5_e3"
+EXPERIMENT="english_mixing_linear_lr5_e5"
 EXPERIMENT_PATH="${SRC_DIR}/experiments/${EXPERIMENT}"
 DATASET_DIR="/mnt/scratch/tmp/ipoloka/full_dataset"
 HF_HOME="/mnt/scratch/tmp/ipoloka/hf_cache"
 PROJECT="intermediate_mixing_v2"
-PORT=9013
+PORT=9015
 
 export WANDB_PROJECT="${PROJECT}"
 export WANDB_RUN_ID="${EXPERIMENT}"
@@ -56,7 +56,7 @@ args=(
   --per_device_eval_batch_size="32"
   --do_train
   --do_evaluate
-  --learning_rate="5e-3"
+  --learning_rate="5e-5"
   --logging_steps="1"
   --save_strategy="epoch"
   --early_stopping_patience="6"
