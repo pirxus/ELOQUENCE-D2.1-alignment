@@ -71,6 +71,8 @@ args=(
   --fp16
   --gradient_accumulation_steps="8"
   --load_best_model_at_end
+  --restart_from="/mnt/matylda5/ipoloka/projects/huggingface_asr/experiments/english_mixing_scalar_lr5_e4/checkpoint-429"
+
 
 
   # Data related arguments
@@ -109,5 +111,4 @@ args=(
 
 python src/trainers/train_enc_dec_asr.py "${args[@]}"
 
-ps aux|grep wandb|grep -v grep | awk '{print $2}'|xargs kill -9
 kill $SSH_PID
