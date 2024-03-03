@@ -34,6 +34,8 @@ export WANDB_PROJECT="intermediate_mixing_v2"
 export WANDB_RUN_ID="${EXPERIMENT}"
 export HF_HOME="/mnt/scratch/tmp/ipoloka/hf_cache"
 export PYTHONPATH="${PYTHONPATH}:${SRC_DIR}/src"
+
+export PATH="/mnt/matylda5/ipoloka/utils/SCTK/bin:$PATH"
 #export HF_DATASETS_OFFLINE=1
 #export HF_HUB_OFFLINE=1
 #export TRANSFORMERS_OFFLINE=1
@@ -65,13 +67,14 @@ args=(
   --dataloader_num_workers="6"
   --metric_for_best_model="eval_wer"
   --remove_unused_columns="False"
-  --save_total_limit="1"
+  --save_total_limit="2"
   --num_train_epochs="200"
   --greater_is_better="False"
   --group_by_length="False"
   --fp16
   --gradient_accumulation_steps="8"
   --load_best_model_at_end
+  --restart_from="/mnt/matylda5/ipoloka/projects/huggingface_asr/experiments/english_mixing_scalar_lr5_e2/checkpoint-48"
 
 
   # Data related arguments
