@@ -38,12 +38,12 @@ export PYTHONPATH="${PYTHONPATH}:${SRC_DIR}/src"
 #export HF_HUB_OFFLINE=1
 #export TRANSFORMERS_OFFLINE=1
 export $(/mnt/matylda4/kesiraju/bin/gpus 1) || exit 1
-ssh -N -D 9000 pcspeech4 &
+ssh -N -D 9004 pcspeech4 &
 SSH_PID=$!
 
-export http_proxy=socks5://localhost:9000
+export http_proxy=socks5://localhost:9004
 
-export https_proxy=socks5://localhost:9000
+export https_proxy=socks5://localhost:9004
 
 cd $SRC_DIR
 
