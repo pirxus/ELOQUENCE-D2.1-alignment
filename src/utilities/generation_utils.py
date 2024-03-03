@@ -1,3 +1,4 @@
+"""Utilities for generation."""
 import os
 import pickle  # nosec
 from typing import Callable, Dict, List, Optional
@@ -18,6 +19,7 @@ def save_nbests(
     batch_size: int = 1,
     outputs: List[Dict] = None,
 ):
+    """Save nbests, scores and labels to files."""
     nbests = [tokenizer.decode(elem.tolist(), skip_special_tokens=True) for item in nbests for elem in item.unbind()]
     processed_labels = []
     if outputs is not None:
@@ -70,4 +72,4 @@ def save_predictions(
                 file_handler.write(f"{string} (utterance_{index})\n")
 
     # evaluate wer also with sclite
-    os.system(f"sclite -F -D -i wsj -r {sclite_files[1]} trn -h {sclite_files[0]} trn -o snt sum")  # nosec
+    os.system(f"sclite -F -D -i wsj -r {sclite_files[1]} trn -h {sclite_files[0]} trn -o snt sum dtl")  # nosec
