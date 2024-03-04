@@ -109,6 +109,11 @@ def do_lower_case(example: str, label_column: str) -> Dict[str, str]:
     return {label_column: example.lower()}
 
 
+def remove_punctuation(example: str, label_column: str) -> Dict[str, str]:
+    """Removes punctuation."""
+    return {label_column: re.sub(r"[!\"#$%&\'()*+,.\/\\:;<=>?@\[\]^_`{|}~]", "", example)}
+
+
 def remove_multiple_whitespaces_and_strip(example: str, label_column: str) -> Dict[str, str]:
     """Removes multiple whitespaces from batch."""
     return {label_column: re.sub(r"\s+", " ", example).strip()}
