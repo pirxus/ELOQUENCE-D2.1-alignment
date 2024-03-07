@@ -1,12 +1,12 @@
 #!/usr/bin/bash
 #$ -N ASR
-#$ -q long.q@@gpu
-#$ -l ram_free=32G,mem_free=32G
+#$ -q all.q@@gpu
+#$ -l ram_free=16G,mem_free=16G
 #$ -l scratch=2
 #$ -l gpu=1,gpu_ram=20G
 
 # Job should finish in 24 hours
-ulimit -t 86400
+ulimit -t 14400
 
 # Enable opening multiple files
 ulimit -n 4096
