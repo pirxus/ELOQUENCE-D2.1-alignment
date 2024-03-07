@@ -45,7 +45,7 @@ ssh -N -D $PORT pcspeech4 &
 SSH_PID=$!
 
 # Redirect stdout and stderr to a single file
-#exec &> "/mnt/matylda5/ipoloka/projects/LoCo-ASR/experiments/${EXPERIMENT}.log"
+exec &> "/mnt/matylda5/ipoloka/projects/LoCo-ASR/experiments/${EXPERIMENT}.log"
 
 
 cd $SRC_DIR
