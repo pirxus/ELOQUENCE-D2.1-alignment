@@ -30,7 +30,7 @@ EXPERIMENT_PATH="${SRC_DIR}/experiments/${EXPERIMENT}"
 DATASET_DIR="/mnt/scratch/tmp/ipoloka/full_dataset"
 HF_HOME="/mnt/scratch/tmp/ipoloka/hf_cache"
 PROJECT="intermediate_mixing_v2"
-PORT=9031
+PORT=9047
 
 export WANDB_PROJECT="${PROJECT}"
 export WANDB_RUN_ID="${EXPERIMENT}"
@@ -89,7 +89,7 @@ args=(
   --validation_slice_seed="42"
   --cut_validation_from_train
   --validation_slice="1"
-  --test_splits commonvoice_en_test fleurs_test
+  --test_splits wsj_test fisher_swbd_dev voxpopuli_test tedlium3_test librispeech_test.clean librispeech_test.other commonvoice_en_test fleurs_test
 
 
   # Preprocessing related arguments

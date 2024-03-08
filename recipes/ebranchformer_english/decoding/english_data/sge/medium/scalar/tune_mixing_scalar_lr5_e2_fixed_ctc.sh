@@ -3,7 +3,7 @@
 #$ -q long.q@@gpu
 #$ -l ram_free=32G,mem_free=32G
 #$ -l scratch=2
-#$ -l gpu=1,gpu_ram=40G
+#$ -l gpu=1,gpu_ram=20G
 
 # Job should finish in 24 hours
 ulimit -t 86400
@@ -30,7 +30,7 @@ EXPERIMENT_PATH="${SRC_DIR}/experiments/${EXPERIMENT}"
 DATASET_DIR="/mnt/scratch/tmp/ipoloka/full_dataset"
 HF_HOME="/mnt/scratch/tmp/ipoloka/hf_cache"
 PROJECT="intermediate_mixing_v2"
-PORT=9025
+PORT=9049
 
 export WANDB_PROJECT="${PROJECT}"
 export WANDB_RUN_ID="${EXPERIMENT}"
@@ -45,7 +45,7 @@ ssh -N -D $PORT pcspeech4 &
 SSH_PID=$!
 
 # Redirect stdout and stderr to a single file
-exec &> "/mnt/matylda5/ipoloka/projects/LoCo-ASR/experiments/${EXPERIMENT}.log"
+exec &> "/mnt/matylda5/ipoloka/projects/huggingface_asr/experiments/${EXPERIMENT}.log"
 
 
 cd $SRC_DIR
@@ -54,7 +54,7 @@ args=(
   # General training arguments
   --output_dir=$EXPERIMENT_PATH
   --per_device_train_batch_size="256"
-  --per_device_eval_batch_size="32"
+  --per_device_eval_batch_size="8"
   --do_evaluate
   --learning_rate="5e-2"
   --logging_steps="1"

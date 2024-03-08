@@ -30,7 +30,7 @@ EXPERIMENT_PATH="${SRC_DIR}/experiments/${EXPERIMENT}"
 DATASET_DIR="/mnt/scratch/tmp/ipoloka/full_dataset"
 HF_HOME="/mnt/scratch/tmp/ipoloka/hf_cache"
 PROJECT="intermediate_mixing_v2"
-PORT=9030
+PORT=9048
 
 export WANDB_PROJECT="${PROJECT}"
 export WANDB_RUN_ID="${EXPERIMENT}"
