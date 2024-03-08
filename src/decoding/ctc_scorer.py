@@ -166,8 +166,8 @@ class CTCPrefixScoreTH(object):
                 dim=0,
             )
 
-        for si in range(n_bh):
-            log_psi[si, self.eos] = r_sum[self.end_frames[si // n_hyps], si]
+        # for si in range(n_bh):
+        #     log_psi[si, self.eos] = r_sum[self.end_frames[si // n_hyps], si]
 
         # exclude blank probs
         log_psi[:, self.blank] = self.logzero
