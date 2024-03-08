@@ -1,12 +1,12 @@
 #!/usr/bin/bash
 #$ -N ASR
-#$ -q long.q@@gpu
+#$ -q all.q@@gpu
 #$ -l ram_free=32G,mem_free=32G
 #$ -l scratch=2
-#$ -l gpu=1,gpu_ram=20G
+#$ -l gpu=1,gpu_ram=40G
 
 # Job should finish in 24 hours
-ulimit -t 86400
+ulimit -t 14400
 
 # Enable opening multiple files
 ulimit -n 4096
@@ -54,7 +54,7 @@ args=(
   # General training arguments
   --output_dir=$EXPERIMENT_PATH
   --per_device_train_batch_size="256"
-  --per_device_eval_batch_size="6"
+  --per_device_eval_batch_size="4"
   --do_evaluate
   --learning_rate="5e-2"
   --logging_steps="1"
@@ -89,7 +89,7 @@ args=(
   --validation_slice_seed="42"
   --cut_validation_from_train
   --validation_slice="1"
-  --test_splits wsj_test fisher_swbd_dev voxpopuli_test tedlium3_test librispeech_test.clean librispeech_test.other commonvoice_en_test fleurs_test
+  --test_splits commonvoice_en_test fleurs_test
 
 
   # Preprocessing related arguments
