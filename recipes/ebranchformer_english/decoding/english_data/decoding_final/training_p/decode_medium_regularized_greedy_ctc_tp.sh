@@ -5,9 +5,9 @@
 #SBATCH --time 01:00:00
 #SBATCH --nodes=1
 #SBATCH --gpus=4
-#SBATCH --output=/mnt/proj1/open-28-58/lakoc/huggingface_asr/outputs/english_model_medium_regularized_greedy_ctc_ee.out
+#SBATCH --output=/mnt/proj1/open-28-58/lakoc/huggingface_asr/outputs/english_model_medium_regularized_greedy_ctc_tp.out
 
-EXPERIMENT="english_model_medium_regularized_greedy_ctc_ee"
+EXPERIMENT="english_model_medium_regularized_greedy_ctc_tp"
 PROJECT="regularizations_english_corpus"
 WORK_DIR="/mnt/proj1/open-28-58/lakoc/huggingface_asr"
 RECIPE_DIR="${WORK_DIR}/recipes/ebranchformer_english"
@@ -31,7 +31,7 @@ cd $WORK_DIR
 args=(
   # General training arguments
   --output_dir=$EXPERIMENT_PATH
-  --per_device_eval_batch_size="64"
+  --per_device_eval_batch_size="32"
   --dataloader_num_workers="24"
   --do_evaluate
 
@@ -55,7 +55,7 @@ args=(
   --from_pretrained="/mnt/proj1/open-28-58/lakoc/huggingface_asr/experiments/ebranchformer_english_medium_regularized_normalized/checkpoint-386100"
   --expect_2d_input
   --decoder_pos_emb_fixed
-  --config_overrides="decoder_average_logits=True;decoder_head_weights=[1.0,0.0]"
+  --config_overrides="decoder_average_logits=True;decoder_head_weights=[0.4,0.6]"
 
   # Generation related arguments
   --num_beams="1"
