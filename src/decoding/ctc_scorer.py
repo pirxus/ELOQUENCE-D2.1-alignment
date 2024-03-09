@@ -272,8 +272,8 @@ class CTCRescorerLogitsProcessor(LogitsProcessor):
         debug: bool = False,
     ):
         super().__init__()
-        reduce_lens_by = (encoder_logits.argmax(dim=-1) == eos_token_id).sum(dim=-1)
-        encoder_output_lens = encoder_output_lens - reduce_lens_by
+        # reduce_lens_by = (encoder_logits.argmax(dim=-1) == eos_token_id).sum(dim=-1)
+        # encoder_output_lens = encoder_output_lens - reduce_lens_by
         self.pad_token_id = pad_token_id
         self.ctc_prefix_scorer = CTCPrefixScoreTH(
             torch.nn.functional.log_softmax(encoder_logits, dim=-1),
