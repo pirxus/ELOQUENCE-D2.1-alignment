@@ -45,6 +45,7 @@ args=(
   --writer_batch_size="500"
   --test_splits wsj_test fisher_swbd_dev voxpopuli_test tedlium3_test librispeech_test.clean librispeech_test.other commonvoice_en_test fleurs_test  --text_transformations filter_empty_transcriptions
   --train_split fleurs_test
+
   # Preprocessing related arguments
   --data_preprocessing_config="${RECIPE_DIR}/data_preprocessing.json"
 
@@ -53,6 +54,7 @@ args=(
   --feature_extractor_name="Lakoc/log_80mel_extractor_16k"
   --from_pretrained="/mnt/proj1/open-28-58/lakoc/huggingface_asr/experiments/ebranchformer_english_medium_regularized_normalized/checkpoint-386100"
   --expect_2d_input
+  --decoder_pos_emb_fixed
   --config_overrides="decoder_average_logits=True;decoder_head_weights=[1.0,0.0]"
 
   # Generation related arguments
