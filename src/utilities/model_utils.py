@@ -75,44 +75,46 @@ def fetch_config(config: PretrainedConfig, base_config: Dict, config_overrides: 
     if config_overrides is not None:
         logger.info(f"Overriding config: {config_overrides}")
         parsed_dict = base_config | dict(x.split("=") for x in config_overrides.split(";"))
-        for k_orig, v in parsed_dict.items():
-            if k_orig.startswith("encoder_"):
-                config_local = config.encoder
-                k = k_orig[len("encoder_") :]
-            elif k_orig.startswith("decoder_"):
-                config_local = config.decoder
-                k = k_orig[len("decoder_") :]
+    else:
+        parsed_dict = base_config
+    for k_orig, v in parsed_dict.items():
+        if k_orig.startswith("encoder_"):
+            config_local = config.encoder
+            k = k_orig[len("encoder_") :]
+        elif k_orig.startswith("decoder_"):
+            config_local = config.decoder
+            k = k_orig[len("decoder_") :]
+        else:
+            config_local = config
+            k = k_orig
+        if not hasattr(config_local, k):
+            if k_orig in base_config:
+                setattr(config_local, k, type(base_config[k_orig])(v))
             else:
-                config_local = config
-                k = k_orig
-            if not hasattr(config_local, k):
-                if k_orig in base_config:
-                    setattr(config_local, k, type(base_config[k_orig])(v))
-                else:
-                    raise ValueError(f"key {k} isn't in the original config dict")
+                raise ValueError(f"key {k} isn't in the original config dict")
 
-            old_v = getattr(config_local, k)
-            if isinstance(old_v, bool):
-                if isinstance(v, bool):
-                    setattr(config_local, k, v)
-                    continue
-                if v.lower() in ["true", "1", "y", "yes"]:
-                    v = True
-                elif v.lower() in ["false", "0", "n", "no"]:
-                    v = False
-                else:
-                    raise ValueError(f"can't derive true or false from {v} (key {k})")
-            elif isinstance(old_v, int):
-                v = int(v)
-            elif isinstance(old_v, float):
-                v = float(v)
-            elif isinstance(old_v, list):
-                v = json.loads(v)
-            elif not isinstance(old_v, str):
-                raise ValueError(
-                    f"You can only update int, float, bool or string values in the config, got {v} for key {k}"
-                )
-            setattr(config_local, k, v)
+        old_v = getattr(config_local, k)
+        if isinstance(old_v, bool):
+            if isinstance(v, bool):
+                setattr(config_local, k, v)
+                continue
+            if v.lower() in ["true", "1", "y", "yes"]:
+                v = True
+            elif v.lower() in ["false", "0", "n", "no"]:
+                v = False
+            else:
+                raise ValueError(f"can't derive true or false from {v} (key {k})")
+        elif isinstance(old_v, int):
+            v = int(v)
+        elif isinstance(old_v, float):
+            v = float(v)
+        elif isinstance(old_v, list):
+            v = json.loads(v)
+        elif not isinstance(old_v, str):
+            raise ValueError(
+                f"You can only update int, float, bool or string values in the config, got {v} for key {k}"
+            )
+        setattr(config_local, k, v)
     return config
 
 
