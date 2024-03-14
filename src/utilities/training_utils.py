@@ -8,12 +8,6 @@ from transformers import BatchFeature, Seq2SeqTrainer, Trainer
 from transformers.data.data_collator import DataCollator
 from transformers.deepspeed import deepspeed_init
 from transformers.dependency_versions_check import dep_version_check
-
-# Integrations must be imported before ML frameworks:
-# isort: off
-from transformers.integrations import (
-    is_fairscale_available,
-)
 from transformers.modeling_utils import PreTrainedModel
 
 # Integrations must be imported before ML frameworks:
@@ -74,8 +68,6 @@ if is_torch_tpu_available(check_device=False):
     # pylint: disable=import-error
     import torch_xla.core.xla_model as xm
 
-if is_fairscale_available():
-    dep_version_check("fairscale")
 
 if is_sagemaker_mp_enabled():
     # pylint: disable=import-error
@@ -97,8 +89,6 @@ if is_torch_tpu_available(check_device=False):
     # pylint: disable=import-error
     import torch_xla.core.xla_model as xm
 
-if is_fairscale_available():
-    dep_version_check("fairscale")
 
 if is_sagemaker_mp_enabled():
     # pylint: disable=import-error
