@@ -110,6 +110,8 @@ def fetch_config(config: PretrainedConfig, base_config: Dict, config_overrides: 
             v = float(v)
         elif isinstance(old_v, list):
             v = json.loads(v)
+        elif old_v is None:
+            pass
         elif not isinstance(old_v, str):
             raise ValueError(
                 f"You can only update int, float, bool or string values in the config, got {v} for key {k}"
