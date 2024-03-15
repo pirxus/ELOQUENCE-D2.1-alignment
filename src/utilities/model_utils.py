@@ -81,7 +81,7 @@ def fetch_config(config: PretrainedConfig, base_config: Dict, config_overrides: 
         if k_orig.startswith("encoder_"):
             config_local = config.encoder
             k = k_orig[len("encoder_") :]
-        elif k_orig.startswith("decoder_"):
+        elif k_orig.startswith("decoder_") and k_orig != "decoder_start_token_id":
             config_local = config.decoder
             k = k_orig[len("decoder_") :]
         else:
