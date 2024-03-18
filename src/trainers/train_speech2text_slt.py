@@ -10,29 +10,22 @@ from transformers import (
     Speech2TextConfig,
     Speech2TextFeatureExtractor,
     Speech2TextForConditionalGeneration,
+    TrainerCallback,
 )
-
-from models.speech2text_espnet import Speech2TextForConditionalGeneration2d
 from transformers.utils import logging
-from datasets import load_dataset
 
 from utilities.callbacks import init_callbacks
 from utilities.collators import SpeechCollatorWithPadding
 from utilities.data_utils import get_dataset
-from utilities.eval_utils import compute_metrics
-from utilities.model_utils import average_checkpoints
+from utilities.eval_utils import compute_metrics_translation
+from utilities.model_utils import average_checkpoints as average_checkpoints
 from utilities.general_utils import do_evaluate, do_generate
-from utilities.generation_utils import activate_joint_decoding
-from utilities.model_utils import instantiate_aed_model
 from utilities.training_arguments import (
     DataTrainingArguments,
     GeneralTrainingArguments,
     GenerationArguments,
     ModelArguments,
 )
-
-import torch
-import torch.nn as nn
 
 
 if __name__ == "__main__":
@@ -98,7 +91,6 @@ if __name__ == "__main__":
         "encoder_expect_2d_input": model_args.expect_2d_input,
         "decoder_start_token_id": tokenizer.bos_token_id,
         "decoder_pos_emb_fixed": model_args.decoder_pos_emb_fixed,
-        "input_feat_per_channel": feature_extractor.feature_size,
     }
 
     if model_args.from_config:
@@ -115,8 +107,16 @@ if __name__ == "__main__":
 
         model = Speech2TextForConditionalGeneration.from_pretrained(model_path)
     else:
-        #model = Speech2TextForConditionalGeneration2d(config=s2t_config)
         model = Speech2TextForConditionalGeneration(config=s2t_config)
+
+    # init the encoder from the asr model
+    if model_args.init_encoder:
+        init_enc = Speech2TextForConditionalGeneration.from_pretrained(model_args.init_encoder)
+        source_params = dict(init_enc.model.encoder.named_parameters())
+
+        for name, param in model.model.encoder.named_parameters():
+            param.data.copy_(source_params[name].data)
+
 
     logger.info(f"Finished loading model {model}")
 
@@ -160,7 +160,7 @@ if __name__ == "__main__":
         train_dataset=dataset[data_args.train_split],
         eval_dataset=training_eval_dataset,
         data_collator=data_collator,
-        compute_metrics=lambda pred: compute_metrics(tokenizer, pred, gen_args.wandb_predictions_to_save),
+        compute_metrics=lambda pred: compute_metrics_translation(tokenizer, pred, gen_args.wandb_predictions_to_save),
     )
 
     # 8. Train model
