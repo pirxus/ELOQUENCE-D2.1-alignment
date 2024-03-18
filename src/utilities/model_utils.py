@@ -28,6 +28,8 @@ from models.encoders.e_branchformer import (
 from utilities.general_utils import average_dicts
 from utilities.training_arguments import ModelArguments
 
+from safetensors.torch import load_file, save_file
+
 logger = logging.get_logger("transformers")
 
 AutoConfig.register("joint_aed_ctc_speech-encoder-decoder", JointCTCAttentionEncoderDecoderConfig)
@@ -36,8 +38,23 @@ AutoModelForSpeechSeq2Seq.register(JointCTCAttentionEncoderDecoderConfig, JointC
 AutoConfig.register("wav2vec2-ebranchformer", Wav2Vec2EBranchformerConfig)
 CustomAutoModelForCTC.register(Wav2Vec2EBranchformerConfig, Wav2Vec2EBranchformerForCTC)
 
-
+# https://github.com/huggingface/safetensors/issues/194 -- metadata issue
 def average_checkpoints(experiment_dir: str) -> str:
+    checkpoints = glob.glob(f"{experiment_dir}/checkpoint*/model.safetensors")
+    state_dicts = [load_file(checkpoint) for checkpoint in checkpoints]
+    sum_state_dict, n_checkpoints = average_dicts(*state_dicts)
+    del state_dicts
+    average_dict = {key: value.div(n_checkpoints) for key, value in sum_state_dict.items()}
+    dst_path = os.path.join(experiment_dir, "average_checkpoint")
+    shutil.copytree(os.path.dirname(checkpoints[0]), dst_path, dirs_exist_ok=True)
+    if os.path.exists(os.path.join(experiment_dir, "tokenizer")):
+        shutil.copytree(os.path.join(experiment_dir, "tokenizer"), dst_path, dirs_exist_ok=True)
+    if os.path.exists(os.path.join(experiment_dir, "feature_extractor")):
+        shutil.copytree(os.path.join(experiment_dir, "feature_extractor"), dst_path, dirs_exist_ok=True)
+    save_file(average_dict, os.path.join(dst_path, "model.safetensors"), {'format': 'pt'})
+    return dst_path
+
+def average_checkpoints_torch(experiment_dir: str) -> str:
     checkpoints = glob.glob(f"{experiment_dir}/checkpoint*/pytorch_model.bin")
     state_dicts = [torch.load(checkpoint) for checkpoint in checkpoints]
     sum_state_dict, n_checkpoints = average_dicts(*state_dicts)
@@ -45,8 +62,10 @@ def average_checkpoints(experiment_dir: str) -> str:
     average_dict = {key: value.div(n_checkpoints) for key, value in sum_state_dict.items()}
     dst_path = os.path.join(experiment_dir, "average_checkpoint")
     shutil.copytree(os.path.dirname(checkpoints[0]), dst_path, dirs_exist_ok=True)
-    shutil.copytree(os.path.join(experiment_dir, "tokenizer"), dst_path, dirs_exist_ok=True)
-    shutil.copytree(os.path.join(experiment_dir, "feature_extractor"), dst_path, dirs_exist_ok=True)
+    if os.path.exists(os.path.join(experiment_dir, "tokenizer")):
+        shutil.copytree(os.path.join(experiment_dir, "tokenizer"), dst_path, dirs_exist_ok=True)
+    if os.path.exists(os.path.join(experiment_dir, "feature_extractor")):
+        shutil.copytree(os.path.join(experiment_dir, "feature_extractor"), dst_path, dirs_exist_ok=True)
     torch.save(average_dict, os.path.join(dst_path, "pytorch_model.bin"))
     return dst_path
 
