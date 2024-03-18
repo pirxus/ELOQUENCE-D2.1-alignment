@@ -26,6 +26,29 @@ from utilities.training_arguments import DataTrainingArguments, GeneralTrainingA
 
 logger = logging.get_logger("transformers")
 
+class EncoderFreezer(TrainerCallback):
+    def __init__(self, n_epochs):
+        self.n_epochs = n_epochs
+
+    def on_epoch_begin(self, args, state, control, model, **kwargs):
+        if state.epoch <= self.n_epochs:
+            self.freeze_encoder(model)
+        else:
+            self.unfreeze_encoder(model)
+
+    def on_save(self, args, state, control, model, **kwargs):
+        self.unfreeze_encoder(model)
+
+    def freeze_encoder(self, model):
+        logger.info("Freezing the encoder")
+        for _, param in model.model.encoder.named_parameters():
+            param.requires_grad = False
+
+    def unfreeze_encoder(self, model):
+        logger.info("Unfreezing the encoder")
+        for _, param in model.model.encoder.named_parameters():
+            param.requires_grad = True
+
 
 class DelayedStartWrapper:
     def __init__(self, callback: FunctionReturnWrapper, delay_steps: int):
@@ -169,4 +192,6 @@ def init_callbacks(
         callbacks.append(EarlyStoppingCallback(early_stopping_patience=training_args.early_stopping_patience))
     if training_args.track_ctc_loss:
         callbacks.append(AdditionalLossPrinterCallback())
+    if training_args.freeze_encoder_epochs:
+        callbacks.append(EncoderFreezer(training_args.freeze_encoder_epochs))
     return callbacks
