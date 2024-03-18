@@ -1,23 +1,6 @@
 {
   "train": [
     {
-      "name": "torchaudio.transforms.SpeedPerturbation",
-      "params": {
-        "orig_freq": 16000,
-        "factors": [
-          0.9,
-          1.0,
-          1.1
-        ]
-      },
-      "steps_before_activation": 2,
-      "return_behaviour": [
-        0
-      ],
-      "fn_call_params": {
-      }
-    },
-    {
       "name": "feature_extractor",
       "steps_before_activation": 0,
       "fn_call_params": {
@@ -49,7 +32,7 @@
         ],
         "num_time_mask": 2
       },
-      "steps_before_activation": 15000,
+      "steps_before_activation": 5000,
       "fn_call_params": {
       },
       "return_behaviour": [

@@ -49,7 +49,7 @@
         ],
         "num_time_mask": 2
       },
-      "steps_before_activation": 15000,
+      "steps_before_activation": 5000,
       "fn_call_params": {
       },
       "return_behaviour": [

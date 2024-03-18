@@ -1,12 +1,12 @@
 #!/bin/bash
-#$ -N HOW2_prep
-#$ -q all.q@@blade
+#$ -N HOW2_prep_text
+#$ -q short.q@@blade
 #$ -l ram_free=2G,mem_free=2G
-#$ -l matylda6=0.5
-#$ -l scratch=0.5
-#$ -pe smp 16
-#$ -o /mnt/matylda6/xsedla1h/projects/huggingface_asr/how2_prep.o
-#$ -e /mnt/matylda6/xsedla1h/projects/huggingface_asr/how2_prep.e
+#$ -l matylda6=0.1
+#$ -l scratch=0.1
+#$ -pe smp 4
+#$ -o /mnt/matylda6/xsedla1h/projects/huggingface_asr/how2_prep_text.o
+#$ -e /mnt/matylda6/xsedla1h/projects/huggingface_asr/how2_prep_text.e
 
 # Limit job runtime to 24 h -> 86400 s, send SIGXCPU and SIGKILL if limit is breached
 ulimit -t 86400
@@ -40,6 +40,5 @@ export HF_HOME="/mnt/matylda6/xsedla1h/hugging-face"
 python src/dataset_builders/preprocess_dataset.py \
   --dataset_builder src/dataset_builders/how2_dataset \
   --metadata_dir $METADATA_DIR \
-  --num_proc 16 \
-  --regenerate \
-  --output_dir /mnt/matylda6/xsedla1h/data/how2
+  --num_proc 4 \ --regenerate \
+  --output_dir /mnt/scratch/tmp/xsedla1h/how2

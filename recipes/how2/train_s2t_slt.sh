@@ -1,15 +1,13 @@
 #!/bin/bash
-#$ -N s2t_marek
-#$ -q short.q@supergpu10*
-#$ -l ram_free=20G,mem_free=20G
+#$ -N slt_final_init
+#$ -q long.q@supergpu*
+#$ -l ram_free=40G,mem_free=40G
 #$ -l matylda6=0.5
 #$ -l ssd=1,ssd_free=200G
 #$ -l gpu=1,gpu_ram=20G
-#$ -o /mnt/matylda6/xsedla1h/projects/job_logs/asr_2/s2t_marek.o
-#$ -e /mnt/matylda6/xsedla1h/projects/job_logs/asr_2/s2t_marek.e
+#$ -o /mnt/matylda6/xsedla1h/projects/job_logs/slt/slt_final_init.o
+#$ -e /mnt/matylda6/xsedla1h/projects/job_logs/slt/slt_final_init.e
 #
-
-EXPERIMENT="s2t_marek"
 
 # Job should finish in about 1 day
 ulimit -t 100000
@@ -30,6 +28,7 @@ unset PYTHONPATH
 unset PYTHONHOME
 source /mnt/matylda6/xsedla1h/miniconda3/bin/activate /mnt/matylda6/xsedla1h/envs/huggingface_asr
 
+EXPERIMENT="slt_final_init"
 
 WORK_DIR="/mnt/matylda6/xsedla1h/projects/huggingface_asr"
 EXPERIMENT_PATH="${WORK_DIR}/exp/${EXPERIMENT}"
@@ -51,10 +50,6 @@ export CUDA_VISIBLE_DEVICES=$(free-gpus.sh 1) || {
   exit 1
 }
 
-nvidia-smi
-echo "cuda visible devices: $CUDA_VISIBLE_DEVICES"
-
-
 export TRANSFORMERS_OFFLINE=1
 export HF_DATASETS_OFFLINE=1
 export HF_HUB_OFFLINE=1
@@ -75,19 +70,21 @@ args=(
   --per_device_train_batch_size="64" # 64
   --per_device_eval_batch_size="32"
   --dataloader_num_workers="4"
-  --num_train_epochs="1"
+  --num_train_epochs="70"
   --group_by_length="True"
+  --bf16 # FIXME
   --do_train
-  --bf16
   #--do_evaluate
   --load_best_model_at_end
+  --freeze_encoder_epochs="8"
+
   #--restart_from="/mnt/matylda6/xsedla1h/projects/huggingface_asr/exp/s2t_50ep_no_pert_cont/checkpoint-21270"
 
   # Optimizer related arguments
   --optim="adamw_torch"
-  --learning_rate="2e-3"
-  --warmup_steps="20000"
-  #--early_stopping_patience="10"
+  --learning_rate="1e-3"
+  --warmup_steps="15000"
+  --early_stopping_patience="10"
   --weight_decay="1e-5"
   --max_grad_norm="5.0"
   --lsm_factor="0.1"
@@ -99,8 +96,8 @@ args=(
   --save_strategy="epoch"
   --evaluation_strategy="epoch"
   --wandb_predictions_to_save=50 # 60
-  --greater_is_better="False"
-  --metric_for_best_model="eval_wer"
+  --greater_is_better="True"
+  --metric_for_best_model="eval_bleu"
   --save_total_limit="5"
 
   # Data related arguments
@@ -113,22 +110,23 @@ args=(
   --preprocessing_num_workers="4"
   --writer_batch_size="200" # 1000
   --collator_rename_features="False"
-  --text_column_name="transcription"
+  --text_column_name="translation"
   --validation_split val
   --test_splits val dev5
-  --do_lower_case
-  --lcrm
+  #--do_lower_case
+  #--lcrm
 
   # Preprocessing related arguments
-  --data_preprocessing_config="${RECIPE_DIR}/data_preprocessing.json"
+  --data_preprocessing_config="${RECIPE_DIR}/data_preprocessing_spec.json"
 
   # Model related arguments
-  --tokenizer_name="pirxus/how2_en_bpe8000_lcrm"
+  --tokenizer_name="pirxus/how2_pt_bpe8000_tc"
   --feature_extractor_name="pirxus/features_fbank_80"
   --from_config="facebook/s2t-small-librispeech-asr"
+  --init_encoder="/mnt/matylda6/xsedla1h/projects/huggingface_asr/exp/s2t_fixed_v2_1d/checkpoint-93621"
 
   # Generation related arguments
-  --num_beams="5"
+  --num_beams="10"
   --max_length="150"
   --predict_with_generate
   --decoding_ctc_weight="0.0"
@@ -136,8 +134,8 @@ args=(
 )
 
 echo "Running training.."
-python src/trainers/train_speech2text.py "${args[@]}"
-#
+python src/trainers/train_speech2text_slt.py "${args[@]}"
+
 # delete the ssd directory
 echo "Cleaning the ssd directory.."
 rm -rf /mnt/ssd/xsedla1h/${EXPERIMENT}
