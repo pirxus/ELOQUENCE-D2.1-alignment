@@ -17,6 +17,12 @@ class ModelArguments:
     from_pretrained: Optional[str] = field(
         default=None, metadata={"help": "Path to pretrained model or model identifier from huggingface.co/models"}
     )
+    init_encoder: Optional[str] = field(
+        default=None, metadata={"help": "Path to pretrained model or model identifier from huggingface.co/models to initialize the encoder with"}
+    )
+    from_config: Optional[str] = field(
+        default=None, metadata={"help": "Path to pretrained model/config or model/config identifier from huggingface.co/models"}
+    )
     from_encoder_decoder_config: Optional[bool] = field(
         default=False, metadata={"help": "Whether to create model from encoder and decoder configs."}
     )
@@ -72,6 +78,7 @@ class GeneralTrainingArguments(Seq2SeqTrainingArguments):
     joint_decoding_during_training: Optional[bool] = field(
         default=False, metadata={"help": "Whether to use joint decoding during training."}
     )
+    freeze_encoder_epochs: Optional[int] = field(default=None, metadata={"help": "Freezes the encoder for the specified number of epochs."})
 
 
 @dataclass
@@ -216,3 +223,24 @@ class TokenizerTrainingArguments:
     mask_token: Optional[str] = field(default="<mask>", metadata={"help": "MASK token"})
     bos_token: Optional[str] = field(default="<s>", metadata={"help": "BOS token"})
     eos_token: Optional[str] = field(default="</s>", metadata={"help": "EOS token"})
+
+@dataclass
+class QFormerArguments:
+    _argument_group_name = "QFormer alignment model arguments"
+    qformer_config: Optional[str] = field(
+        default=None, metadata={"help": "Path to pretrained qformer model/config or model/config identifier from huggingface.co/models"}
+    )
+    n_queries: Optional[int] = field(default=80, metadata={"help": "Number of qformer queries."})
+    qf_n_layers: Optional[int] = field(default=2, metadata={"help": "Number of qformer layers."})
+    qf_hidden_size: Optional[int] = field(default=768, metadata={"help": "Qformer hidden dimension."})
+    qf_n_attn_heads: Optional[int] = field(default=12, metadata={"help": "Number of qformer heads."})
+    qf_intermediate_size: Optional[int] = field(default=3072, metadata={"help": "Qformer intermediate layer dimension."})
+    qf_config_overrides: Optional[str] = field(
+        default=None,
+        metadata={
+            "help": (
+                "Override some existing default qformer config settings when a model is trained from scratch. Example: "
+                "num_hidden_layers=4,hidden_size=256"
+            )
+        },
+    )
