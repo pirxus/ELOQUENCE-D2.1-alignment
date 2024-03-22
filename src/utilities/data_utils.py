@@ -84,7 +84,7 @@ class DistributedContext:
     def wait_after(self):
         if self.world_size > 1:
             if self.local_rank == 0:
-                logger.info(f"Rank {self.local_rank}: Waiting for other processes to finish operation.")
+                logger.info(f"Rank {self.global_rank}: Waiting for other processes to finish operation.")
                 torch.distributed.barrier()
 
 
@@ -111,7 +111,7 @@ def do_lower_case(example: str, label_column: str) -> Dict[str, str]:
 
 def remove_punctuation(example: str, label_column: str) -> Dict[str, str]:
     """Removes punctuation."""
-    return {label_column: re.sub(r"[!\"#$%&\'()*+,.\/\\:;<=>?@\[\]^_`{|}~]", "", example)}
+    return {label_column: re.sub(r"[!\"#$%&\'()*+,.\/\\:;<=>?@^_`{|}~]", "", example)}
 
 
 def remove_multiple_whitespaces_and_strip(example: str, label_column: str) -> Dict[str, str]:

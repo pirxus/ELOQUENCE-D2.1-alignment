@@ -1,6 +1,8 @@
+import multiprocessing
 from dataclasses import dataclass, field
 from typing import List, Optional, Union
 
+import torch
 from transformers import Seq2SeqTrainingArguments
 
 
@@ -80,6 +82,13 @@ class GeneralTrainingArguments(Seq2SeqTrainingArguments):
     mask_unks: Optional[bool] = field(
         default=False, metadata={"help": "Whether to mask unknown tokens for cross entropy."}
     )
+    is_on_lumi: Optional[bool] = field(default=False, metadata={"help": "Whether script is run on Lumi."})
+
+    def __post_init__(self):
+        torch.backends.cudnn.benchmark = False
+        multiprocessing.set_start_method("spawn", force=True)
+        self.dataloader_persistent_workers = True
+        super().__post_init__()
 
 
 @dataclass
