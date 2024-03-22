@@ -2,6 +2,7 @@ import multiprocessing
 from dataclasses import dataclass, field
 from typing import List, Optional, Union
 
+import multiprocess
 import torch
 from transformers import Seq2SeqTrainingArguments
 
@@ -87,6 +88,8 @@ class GeneralTrainingArguments(Seq2SeqTrainingArguments):
     def __post_init__(self):
         torch.backends.cudnn.benchmark = False
         multiprocessing.set_start_method("spawn", force=True)
+        # pylint: disable=no-member
+        multiprocess.set_start_method("spawn", force=True)
         self.dataloader_persistent_workers = True
         super().__post_init__()
 
