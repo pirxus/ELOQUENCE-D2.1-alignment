@@ -86,12 +86,13 @@ class GeneralTrainingArguments(Seq2SeqTrainingArguments):
     is_on_lumi: Optional[bool] = field(default=False, metadata={"help": "Whether script is run on Lumi."})
 
     def __post_init__(self):
-        torch.backends.cudnn.benchmark = False
-        multiprocessing.set_start_method("spawn", force=True)
-        # pylint: disable=no-member
-        multiprocess.set_start_method("spawn", force=True)
-        self.dataloader_persistent_workers = True
-        super().__post_init__()
+        if self.is_on_lumi:
+            torch.backends.cudnn.benchmark = False
+            multiprocessing.set_start_method("spawn", force=True)
+            # pylint: disable=no-member
+            multiprocess.set_start_method("spawn", force=True)
+            self.dataloader_persistent_workers = True
+            super().__post_init__()
 
 
 @dataclass
