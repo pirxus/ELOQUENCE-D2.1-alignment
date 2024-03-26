@@ -83,12 +83,13 @@ class GeneralTrainingArguments(Seq2SeqTrainingArguments):
     mask_unks: Optional[bool] = field(
         default=False, metadata={"help": "Whether to mask unknown tokens for cross entropy."}
     )
-    is_on_lumi: Optional[bool] = field(default=False, metadata={"help": "Whether script is run on Lumi."})
+    use_start_method_spawn: Optional[bool] = field(
+        default=False, metadata={"help": "Whether multiprocessing should be started by spawn"}
+    )
 
     def __post_init__(self):
         super().__post_init__()
-        if self.is_on_lumi:
-            torch.backends.cudnn.benchmark = False
+        if self.use_start_method_spawn:
             multiprocessing.set_start_method("spawn", force=True)
             # pylint: disable=no-member
             multiprocess.set_start_method("spawn", force=True)
@@ -199,6 +200,9 @@ class DataTrainingArguments:
     )
     reshuffle_at_start: Optional[bool] = field(
         default=False, metadata={"help": "Whether to reshuffle the dataset at the start of preprocessing."}
+    )
+    pad_to_multiples_of: Optional[int] = field(
+        default=None, metadata={"help": "Used in collator to pad to the multiples of x."}
     )
 
 
