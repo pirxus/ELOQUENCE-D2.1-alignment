@@ -3,7 +3,7 @@
 #SBATCH --gpus-per-node=4
 #SBATCH --tasks-per-node=1
 #SBATCH --cpus-per-task=7
-#SBATCH --output="output_%x_%j.txt"
+#SBATCH --output="outputs/voxpopuli/small_ed%x_%j.txt"
 #SBATCH --partition=ju-standard-g
 #SBATCH --mem=480G
 #SBATCH --time=24:00:00
@@ -70,7 +70,7 @@ args=(
   --gradient_accumulation_steps="1"
 
   # Logging, saving and evaluation related arguments
-  --report_to="none"
+  --report_to="wandb"
   --logging_steps="1"
   --save_strategy="epoch"
   --evaluation_strategy="epoch"
