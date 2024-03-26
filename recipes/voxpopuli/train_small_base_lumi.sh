@@ -3,7 +3,7 @@
 #SBATCH --gpus-per-node=4
 #SBATCH --tasks-per-node=1
 #SBATCH --cpus-per-task=7
-#SBATCH --output="outputs/voxpopuli/small_ed%x_%j.txt"
+#SBATCH --output="outputs/voxpopuli/output_%x_%j.txt"
 #SBATCH --partition=ju-standard-g
 #SBATCH --mem=480G
 #SBATCH --time=24:00:00
