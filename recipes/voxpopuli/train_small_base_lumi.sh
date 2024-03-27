@@ -2,13 +2,13 @@
 #SBATCH --nodes=1
 #SBATCH --gpus-per-node=4
 #SBATCH --tasks-per-node=1
-#SBATCH --cpus-per-task=7
+#SBATCH --cpus-per-task=28
 #SBATCH --output="outputs/voxpopuli/output_%x_%j.txt"
 #SBATCH --partition=ju-standard-g
 #SBATCH --mem=480G
-#SBATCH --time=24:00:00
+#SBATCH --time=2-00:00:00
 
-EXPERIMENT="ebranchformer_voxpopuli_full_run_test"
+EXPERIMENT="ebranchformer_voxpopuli_lumi_fixed"
 PROJECT="VoxPopuli"
 SRC_DIR="/project/${EC_PROJECT}/ipoloka/huggingface_asr"
 WORK_DIR="/scratch/${EC_PROJECT}/ipoloka/huggingface_asr"
@@ -23,18 +23,18 @@ export NCCL_SOCKET_IFNAME=hsn
 export NCCL_NET_GDR_LEVEL=3
 export MIOPEN_USER_DB_PATH=/tmp/${USER}-miopen-cache-${SLURM_JOB_ID}
 export MIOPEN_CUSTOM_CACHE_DIR=${MIOPEN_USER_DB_PATH}
-export CXI_FORK_SAFE=1
-export CXI_FORK_SAFE_HP=1
-export FI_CXI_DISABLE_CQ_HUGETLB=1
+#export CXI_FORK_SAFE=1
+#export CXI_FORK_SAFE_HP=1
+#export FI_CXI_DISABLE_CQ_HUGETLB=1
 
 # We need to set this to avoid "Cassini Event Queue overflow detected." errors.
-export FI_CXI_DEFAULT_CQ_SIZE=131072
-
-export ROCM_PATH=/opt/rocm
-export SINGULARITYENV_LD_LIBRARY_PATH=/usr/local/lib:/opt/cray/libfabric/1.15.2.0/lib64
+#export FI_CXI_DEFAULT_CQ_SIZE=131072
+#
+#export ROCM_PATH=/opt/rocm
+#export SINGULARITYENV_LD_LIBRARY_PATH=/usr/local/lib:/opt/cray/libfabric/1.15.2.0/lib64
 
 # Try playing with max_split_size_mb if you run into OOM errors.
-export PYTORCH_HIP_ALLOC_CONF=max_split_size_mb:512
+#export PYTORCH_HIP_ALLOC_CONF=max_split_size_mb:512
 
 export HF_HOME="/flash/${EC_PROJECT}/ipoloka/huggingface_cache"
 export PYTHONPATH="${PYTHONPATH}:${SRC_DIR}/src"
@@ -47,9 +47,11 @@ cd $SRC_DIR || exit
 args=(
   # General training arguments
   --output_dir="${EXPERIMENT_PATH}"
-  --per_device_train_batch_size="96"
-  --per_device_eval_batch_size="96"
+  --per_device_train_batch_size="64"
+  --per_device_eval_batch_size="128"
   --dataloader_num_workers="7"
+  --dataloader_prefetch_factor="2"
+  --dataloader_persistent_workers="True"
   --num_train_epochs="150"
   --group_by_length="True"
   --bf16
@@ -71,9 +73,12 @@ args=(
 
   # Logging, saving and evaluation related arguments
   --report_to="wandb"
-  --logging_steps="1"
-  --save_strategy="epoch"
-  --evaluation_strategy="epoch"
+  --logging_steps="10"
+  --save_strategy="steps"
+  --evaluation_strategy="steps"
+  --eval_steps="1306" # 653 per epoch
+  --save_steps="1306"
+  --eval_delay="6530" # delay for 10 epochs
   --wandb_predictions_to_save="500"
   --greater_is_better="False"
   --save_total_limit="5"
@@ -87,7 +92,7 @@ args=(
   --datasets_creation_config="${RECIPE_DIR}/voxpopuli.json"
   --writer_batch_size="200"
   --test_splits voxpopuli_test
-  --pad_to_multiples_of="200"
+  --pad_to_multiples_of="100"
 
   # Preprocessing related arguments
   --data_preprocessing_config="${RECIPE_DIR}/data_preprocessing.json"
