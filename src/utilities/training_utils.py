@@ -382,9 +382,7 @@ class SSLTrainer(Trainer):
         loss = MetadataTensor(loss, metadata=additional_stats)
         num_losses = loss.metadata["num_losses"]
 
-        if self.do_grad_scaling:
-            self.scaler.scale(loss).backward()
-        elif self.use_apex:
+        if self.use_apex:
             with amp.scale_loss(loss, self.optimizer) as scaled_loss:
                 scaled_loss.backward()
         else:
