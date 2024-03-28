@@ -8,7 +8,7 @@
 #SBATCH --mem=480G
 #SBATCH --time=2-00:00:00
 
-EXPERIMENT="ebranchformer_voxpopuli_lumi_fixed"
+EXPERIMENT="ebranchformer_voxpopuli_lumi_fixed_decoding"
 PROJECT="VoxPopuli"
 SRC_DIR="/project/${EC_PROJECT}/ipoloka/huggingface_asr"
 WORK_DIR="/scratch/${EC_PROJECT}/ipoloka/huggingface_asr"
@@ -47,8 +47,8 @@ cd $SRC_DIR || exit
 args=(
   # General training arguments
   --output_dir="${EXPERIMENT_PATH}"
-  --per_device_train_batch_size="64"
-  --per_device_eval_batch_size="128"
+  --per_device_train_batch_size="96"
+  --per_device_eval_batch_size="64"
   --dataloader_num_workers="7"
   --dataloader_prefetch_factor="2"
   --dataloader_persistent_workers="True"
@@ -111,8 +111,9 @@ args=(
   --num_beams="1"
   --max_length="512"
   --predict_with_generate
-  --decoding_ctc_weight="0.3"
+  --decoding_ctc_weight="0"
+  --override_for_evaluation="ctc_weight=0.3;num_beams=10"
 )
 
-srun singularity exec $SIFPYTORCH \
+srun --unbuffered singularity exec $SIFPYTORCH \
 "${SRC_DIR}/cluster_utilities/LUMI/start_multinode_job_inside_env.sh" src/trainers/train_enc_dec_asr.py "${args[@]}"
