@@ -3,7 +3,6 @@ from dataclasses import dataclass, field
 from typing import List, Optional, Union
 
 import multiprocess
-import torch
 from transformers import Seq2SeqTrainingArguments
 
 
@@ -207,6 +206,16 @@ class DataTrainingArguments:
     )
     pad_to_multiples_of: Optional[int] = field(
         default=None, metadata={"help": "Used in collator to pad to the multiples of x."}
+    )
+    dump_prepared_dataset: Optional[str] = field(
+        default=None,
+        metadata={"help": "Path where to dump prepared datasets so it may be read preprocessed from single location."},
+    )
+    dataset_shard_size: Optional[str] = field(
+        default=None, metadata={"help": "Size of the dataset shard to dump to disk."}
+    )
+    load_pure_dataset_only: Optional[bool] = field(
+        default=False, metadata={"help": "Whether to load only the pure dataset without any preprocessing."}
     )
 
 
