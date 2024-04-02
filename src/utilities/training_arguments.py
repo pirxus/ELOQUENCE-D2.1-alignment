@@ -137,7 +137,7 @@ class GenerationArguments:
     eos_space_trick_weight: Optional[float] = field(default=0.0, metadata={"help": "Weight of eos space trick."})
     space_token_id: Optional[int] = field(default=-1, metadata={"help": "Space token id."})
     override_for_evaluation: Optional[str] = field(
-        default=False,
+        default=None,
         metadata={"help": "Arguments to override for evaluation. Example: " "decoding_ctc_weight=0.3;lm_model=gpt2"},
     )
 
