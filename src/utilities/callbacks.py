@@ -113,6 +113,11 @@ class DataPreprocessingManagerCallback(TrainerCallback):
             ]
         }
 
+    def propagate_state_to_transforms(self, state: TrainerState):
+        for split_transforms in self.transforms.values():
+            for transform in split_transforms:
+                transform[0].new_step(state.global_step)
+
     def on_init_end(self, args: TrainingArguments, state: TrainerState, control: TrainerControl, **kwargs):
         for split in self.dataset.keys():
             transform_key = "default_preprocessing" if split not in self.transforms else split
@@ -121,14 +126,14 @@ class DataPreprocessingManagerCallback(TrainerCallback):
                 columns=[self.audio_column_name],
                 output_all_columns=True,
             )
-        for split_transforms in self.transforms.values():
-            for transform in split_transforms:
-                transform[0].new_step(state.global_step)
+        self.propagate_state_to_transforms(state)
+
+    def on_train_begin(self, args: TrainingArguments, state: TrainerState, control: TrainerControl, **kwargs):
+        """This ensures that if the training is resumed, the preprocessing functions are started at the correct step."""
+        self.propagate_state_to_transforms(state)
 
     def on_step_begin(self, args: TrainingArguments, state: TrainerState, control: TrainerControl, **kwargs):
-        for split_transforms in self.transforms.values():
-            for transform in split_transforms:
-                transform[0].new_step(state.global_step)
+        self.propagate_state_to_transforms(state)
 
 
 class AdditionalLossPrinterCallback(TrainerCallback):
