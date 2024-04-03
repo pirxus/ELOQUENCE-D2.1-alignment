@@ -126,10 +126,9 @@ class DataPreprocessingManagerCallback(TrainerCallback):
                 columns=[self.audio_column_name],
                 output_all_columns=True,
             )
-        self.propagate_state_to_transforms(state)
 
     def on_train_begin(self, args: TrainingArguments, state: TrainerState, control: TrainerControl, **kwargs):
-        """This ensures that if the training is resumed, the preprocessing functions are started at the correct step."""
+        """This ensures that the preprocessing functions are aware of the correct step even when restarting."""
         self.propagate_state_to_transforms(state)
 
     def on_step_begin(self, args: TrainingArguments, state: TrainerState, control: TrainerControl, **kwargs):
