@@ -14,6 +14,7 @@ from typing import Optional, Tuple, Union, Any
 
 import torch
 from torch import nn
+import torch.nn.functional as F
 
 
 # Copied from transformers.models.bart.modeling_bart.shift_tokens_right
@@ -54,6 +55,8 @@ class SpeechQFormerEncoderDecoderModelOutput(ModelOutput):
     """
 
     loss: Optional[Tuple[torch.FloatTensor]] = None
+    enc_loss: Optional[Tuple[torch.FloatTensor]] = None
+    dec_loss: Optional[Tuple[torch.FloatTensor]] = None
     logits: Optional[Tuple[torch.FloatTensor]] = None
     audio_outputs: Optional[torch.FloatTensor] = None
     qformer_outputs: Optional[Tuple[torch.FloatTensor]] = None
@@ -76,12 +79,18 @@ class  SpeechQFormerEncoderDecoderConfig(PretrainedConfig):
             qformer=None,
             decoder=None,
             num_query_tokens=80,
+            modality_matching=True,
+            mm_pooling='avg',
+            mm_loss_weight=1.0,
+            ce_loss_weight=1.0,
+
             decoder_pad_token_id=None,
             bos_token_id=None,
             eos_token_id=None,
             pad_token_id=None,
             **kwargs
         ):
+
 
         self.encoder = encoder
         if encoder is None:
@@ -95,6 +104,10 @@ class  SpeechQFormerEncoderDecoderConfig(PretrainedConfig):
             self.decoder.pad_token_id = decoder_pad_token_id
 
         self.num_query_tokens = num_query_tokens
+        self.modality_matching = modality_matching
+        self.mm_pooling = mm_pooling
+        self.mm_loss_weight = mm_loss_weight
+        self.ce_loss_weight = ce_loss_weight
 
         self.decoder_bos_token_id = bos_token_id
         self.decoder_eos_token_id = eos_token_id
@@ -114,12 +127,11 @@ class SpeechQFormerEncoderDecoder(PreTrainedModel):
 
     def __init__(
             self,
-            config: Optional[SpeechQFormerEncoderDecoderConfig] = None,
+            config: SpeechQFormerEncoderDecoderConfig,
             encoder: Optional[PreTrainedModel] = None,
             decoder: Optional[PreTrainedModel] = None,
         ):
         super().__init__(config)
-
 
         if encoder:
             self.encoder = encoder.get_encoder()
@@ -225,18 +237,33 @@ class SpeechQFormerEncoderDecoder(PreTrainedModel):
         language_model_attention_mask = torch.ones(
             language_model_inputs.size()[:-1], dtype=torch.long, device=language_model_inputs.device
         )
-        inputs_embeds = language_model_inputs
-
         batch_size = input_features.shape[0]
 
-        inputs_embeds = self.decoder.get_input_embeddings()(decoder_input_ids)
-        inputs_embeds = torch.cat([language_model_inputs, inputs_embeds.to(language_model_inputs.device)], dim=1)
+        inputs_embeds_prime = self.decoder.get_input_embeddings()(decoder_input_ids)
+        inputs_embeds = torch.cat([language_model_inputs, inputs_embeds_prime.to(language_model_inputs.device)], dim=1)
 
         attention_mask = torch.ones_like(decoder_input_ids)
         expected_device = language_model_attention_mask.device
         attention_mask = torch.cat([language_model_attention_mask, attention_mask.to(expected_device)], dim=1)
 
-        #attention_mask = language_model_attention_mask
+
+        # compute the modality_matching loss
+        mm_loss = None
+        if self.config.modality_matching:
+
+            if self.config.mm_pooling == 'avg':
+                query_pooled = torch.mean(language_model_inputs, 1)
+                emb_pooled = torch.mean(inputs_embeds_prime, 1)
+                mm_loss = F.mse_loss(query_pooled, emb_pooled)
+
+            elif self.config.mm_pooling == 'max':
+                query_pooled = torch.max(language_model_inputs, 1)[0]
+                emb_pooled = torch.max(inputs_embeds_prime, 1)[0]
+                mm_loss = F.mse_loss(query_pooled, emb_pooled)
+
+            elif self.config.mm_pooling == 'dot':
+                mat = torch.bmm(language_model_inputs, inputs_embeds_prime.transpose(1, 2))
+                mm_loss = -torch.max(mat)
 
         outputs = self.decoder(
             inputs_embeds=inputs_embeds,
@@ -246,7 +273,7 @@ class SpeechQFormerEncoderDecoder(PreTrainedModel):
             return_dict=return_dict,
         )
         logits = outputs.logits if return_dict else outputs[0]
-        loss = None
+        lm_loss = None
         # we compute the loss here since we need to take into account the sequence length of the query embeds
         if labels is not None:
             labels = labels.to(logits.device)
@@ -258,7 +285,12 @@ class SpeechQFormerEncoderDecoder(PreTrainedModel):
             # Flatten the tokens
             loss_fct = CrossEntropyLoss(reduction="mean")
 
-            loss = loss_fct(shift_logits.view(-1, self.config.decoder.vocab_size), shift_labels.view(-1))
+            lm_loss = loss_fct(shift_logits.view(-1, self.config.decoder.vocab_size), shift_labels.view(-1))
+
+        # combine the losses
+        if lm_loss is None: lm_loss = torch.tensor(0)
+        if mm_loss is None: mm_loss = torch.tensor(0)
+        loss = self.config.ce_loss_weight * lm_loss + self.config.mm_loss_weight * mm_loss
 
         if not return_dict:
             output = (logits, encoder_outputs, query_outputs, outputs)
@@ -266,6 +298,8 @@ class SpeechQFormerEncoderDecoder(PreTrainedModel):
 
         return SpeechQFormerEncoderDecoderModelOutput(
             loss=loss,
+            enc_loss=mm_loss.detach(),
+            dec_loss=lm_loss.detach(),
             logits=logits,
             audio_outputs=encoder_outputs,
             qformer_outputs=query_outputs,

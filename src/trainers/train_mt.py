@@ -37,8 +37,7 @@ if __name__ == "__main__":
     model_args, data_args, training_args, gen_args = parser.parse_args_into_dataclasses()
 
     # 0. prepare the how2 dataset object..
-    # 1. Collect, preprocess dataset and extract evaluation dataset
-    dataset = get_dataset(
+    dataset, training_eval_dataset = get_dataset(
         datasets_creation_config_path=data_args.datasets_creation_config,
         dataset_name=data_args.dataset_name,
         dataset_config=data_args.dataset_config,
@@ -53,15 +52,13 @@ if __name__ == "__main__":
         audio_column=data_args.audio_column_name,
         train_split=data_args.train_split,
         validation_split=data_args.validation_split,
-        unk_token=data_args.unk_token,
-        fix_apostrophes=data_args.fix_apostrophes,
-        remove_train_unks=data_args.remove_train_unks,
-        do_lower_case=data_args.do_lower_case,
-        remove_punctuation=data_args.remove_punctuation,
-        remove_commas_stops=data_args.remove_commas_stops,
-        remove_listed_chars=data_args.remove_listed_chars,
+        text_transformations=data_args.text_transformations,
+        split_long_segments_to_chunks=data_args.split_long_segments_to_chunks,
+        validation_slice_str=data_args.validation_slice,
+        cut_validation_from_train=data_args.cut_validation_from_train,
+        seed=data_args.validation_slice_seed,
+        reshuffle_at_start=data_args.reshuffle_at_start,
         skip_audio_processing=True,
-        lcrm=data_args.lcrm,
     )
 
     logger.info(f"Dataset processed successfully.{dataset}")
@@ -214,7 +211,6 @@ if __name__ == "__main__":
             gen_args=gen_args,
             training_args=training_args,
             data_args=data_args,
-            eos_token_id=tokenizer_target.eos_token_id,
         )
     # 10. N-best generation
     #if training_args.do_generate:

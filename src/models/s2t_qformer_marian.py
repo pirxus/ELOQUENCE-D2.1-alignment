@@ -113,13 +113,8 @@ class ApmoModel(PreTrainedModel):
 
         if decoder:
 
+            self.decoder = decoder
             self.mt_encoder = decoder.model.encoder
-
-            self.decoder = MarianForCausalLM(decoder.config)
-            #self.decoder = decoder
-
-            self.decoder.model.decoder = deepcopy(decoder.model.decoder)
-            self.decoder.lm_head = deepcopy(decoder.lm_head)
 
         else:
             raise ValueError("Decoder model needs to be supplied")
@@ -131,6 +126,19 @@ class ApmoModel(PreTrainedModel):
 
         self.qformer = Blip2QFormerModel(config.qformer_config)
         self.language_projection = nn.Linear(config.qformer_config.hidden_size, config.lm_config.hidden_size)
+
+        # init the qformer self-attention with the mt_encoder self-attention
+        if self.qformer.config.num_hidden_layers <= self.mt_encoder.config.encoder_layers:
+            for i in range(self.qformer.config.num_hidden_layers): 
+                self.qformer.encoder.layer[i].attention.attention.query.weight.data = self.mt_encoder.layers[i].self_attn.q_proj.weight.data
+                self.qformer.encoder.layer[i].attention.attention.query.bias.data = self.mt_encoder.layers[i].self_attn.q_proj.bias.data
+                self.qformer.encoder.layer[i].attention.attention.key.weight.data = self.mt_encoder.layers[i].self_attn.k_proj.weight.data
+                self.qformer.encoder.layer[i].attention.attention.key.bias.data = self.mt_encoder.layers[i].self_attn.k_proj.bias.data
+                self.qformer.encoder.layer[i].attention.attention.value.weight.data = self.mt_encoder.layers[i].self_attn.v_proj.weight.data
+                self.qformer.encoder.layer[i].attention.attention.value.bias.data = self.mt_encoder.layers[i].self_attn.v_proj.bias.data
+
+                self.qformer.encoder.layer[i].attention.output.dense.weight.data = self.mt_encoder.layers[i].self_attn.out_proj.weight.data
+                self.qformer.encoder.layer[i].attention.output.dense.bias.data = self.mt_encoder.layers[i].self_attn.out_proj.bias.data
 
         # freeze encoder and decoder
         for _, param in self.encoder.named_parameters():
@@ -147,6 +155,11 @@ class ApmoModel(PreTrainedModel):
         # the token_ids on the top level ...
         self.config = config
         self.config.update({'pad_token_id': self.decoder.config.pad_token_id})
+
+    def encoder_decoder_eval(self):
+        # TODO: this will have to be modified when fine-tuning
+        self.encoder.eval()
+        self.decoder.eval()
 
     def forward(
         self,
@@ -213,7 +226,7 @@ class ApmoModel(PreTrainedModel):
 
         # compute the modality matching loss
         mm_loss = None
-        if mm_input_ids is not None:
+        if mm_input_ids is not None and self.config.mm_loss_weight > 0.0:
             mt_encoder_output = self.mt_encoder(
                 input_ids=mm_input_ids,
                 attention_mask=mm_attention_mask,
@@ -224,40 +237,40 @@ class ApmoModel(PreTrainedModel):
             if self.config.mm_pooling == 'avg':
                 query_pooled = torch.mean(query_output.last_hidden_state, 1)
                 enc_pooled = torch.mean(mt_encoder_output[0], 1)
-
                 mm_loss = F.mse_loss(query_pooled, enc_pooled)
 
+            elif self.config.mm_pooling == 'max':
+                query_pooled = torch.max(query_output.last_hidden_state, 1)[0]
+                enc_pooled = torch.max(mt_encoder_output[0], 1)[0]
+                mm_loss = F.mse_loss(query_pooled, enc_pooled)
+
+            elif self.config.mm_pooling == 'dot':
+                mat = torch.bmm(query_output.last_hidden_state, mt_encoder_output[0].transpose(1, 2))
+                mm_loss = -torch.max(mat)
+
         decoder_output = self.decoder(
-            #None,
-            input_ids=decoder_input_ids, # input_ids
-            #attention_mask=None,
-            attention_mask=decoder_attention_mask,
-            #decoder_input_ids=decoder_input_ids,
-            #encoder_outputs=query_output,
-            encoder_hidden_states=query_output.last_hidden_state,
-            #decoder_attention_mask=decoder_attention_mask,
+            input_ids=None, # input_ids
+            attention_mask=None,
+            decoder_input_ids=decoder_input_ids,
+            decoder_attention_mask=decoder_attention_mask,
+            encoder_outputs=query_output,
             head_mask=head_mask,
-            #decoder_head_mask=decoder_head_mask,
             cross_attn_head_mask=cross_attn_head_mask,
             past_key_values=past_key_values,
-            inputs_embeds=None,
-            #decoder_inputs_embeds=None,
             labels=labels,
             use_cache=use_cache,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
+            return_dict=True,
         )
 
-        loss = decoder_output.loss
-        if mm_loss:
-            if return_dict:
-                loss = self.config.ce_loss_weight * decoder_output['loss'] + self.config.mm_loss_weight * mm_loss
+        # combine the losses
+        lm_loss = decoder_output.loss
+        loss = None
+        if mm_loss is None: mm_loss = 0
+
+        loss = self.config.ce_loss_weight * lm_loss + self.config.mm_loss_weight * mm_loss
                         
-            else:
-                loss = self.config.ce_loss_weight * decoder_output[0] + self.config.mm_loss_weight * mm_loss
-
-
         return SpeechQFormerMarianOutput(
                 loss=loss,
                 enc_loss=mm_loss,
@@ -305,27 +318,163 @@ class ApmoModel(PreTrainedModel):
             encoder_attention_mask=audio_attention_mask,
             return_dict=True,
         )
-        query_outputs = self.language_projection(query_outputs[0])
-
-        #decoder_output = self.decoder(
-        #    None, # input_ids
-        #    attention_mask=None,
-        #    encoder_outputs=query_output,
-        #    inputs_embeds=None,
-        #    decoder_inputs_embeds=None,
-        #    return_dict=True,
-        #)
+        query_output = BaseModelOutput(
+            last_hidden_state=self.language_projection(query_outputs[0]),
+        )
 
         decoder_input = (
             torch.LongTensor([[self.decoder.config.decoder_start_token_id]])
-            .repeat(batch_size, 1)
-            .to(query_outputs.device)
+            .repeat(batch_size, 1).to(query_outputs[0].device)
         )
+
         attention_mask = torch.ones_like(decoder_input)
         decoder_output = self.decoder.generate(
-            input_ids=decoder_input, # input_ids
-            attention_mask=attention_mask,
-            encoder_hidden_states=query_outputs,
+            input_ids=None,
+            attention_mask=None,
+            decoder_input_ids=decoder_input,
+            decoder_attention_mask=attention_mask,
+            encoder_outputs=query_output,
             **generate_kwargs,
         )
         return decoder_output
+
+class S2TEncoderMarianDecoder(PreTrainedModel):
+    config_class = ApmoConfig
+    main_input_name = "input_features"
+
+    def __init__(
+            self,
+            config: Optional[ApmoConfig] = None,
+            encoder: Optional[PreTrainedModel] = None,
+            decoder: Optional[PreTrainedModel] = None,
+        ):
+        super().__init__(config)
+
+        if encoder:
+            self.encoder = encoder.get_encoder()
+        else:
+            raise ValueError("Encoder model needs to be supplied")
+
+        if decoder:
+            self.decoder = decoder
+
+        else:
+            raise ValueError("Decoder model needs to be supplied")
+
+        ## freeze decoder
+        for _, param in self.decoder.model.encoder.named_parameters():
+            param.requires_grad = False
+
+
+        # FIXME: the padding required in generate - rework the config class to include all
+        # the token_ids on the top level ...
+        self.config = config
+        self.config.update({'pad_token_id': self.decoder.config.pad_token_id})
+
+    def forward(
+        self,
+        input_features: Optional[torch.LongTensor] = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        decoder_input_ids: Optional[torch.LongTensor] = None,
+        decoder_attention_mask: Optional[torch.LongTensor] = None,
+        head_mask: Optional[torch.Tensor] = None,
+        decoder_head_mask: Optional[torch.Tensor] = None,
+        cross_attn_head_mask: Optional[torch.Tensor] = None,
+        encoder_outputs: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
+        past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
+        decoder_inputs_embeds: Optional[torch.FloatTensor] = None,
+        labels: Optional[torch.LongTensor] = None,
+        use_cache: Optional[bool] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+    ) -> Union[Tuple, SpeechQFormerMarianOutput]:
+        
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        if labels is not None:
+            if decoder_input_ids is None and decoder_inputs_embeds is None:
+                decoder_input_ids = shift_tokens_right(
+                    labels, self.decoder.config.pad_token_id, self.decoder.config.decoder_start_token_id
+                )
+
+        # 1. forward the audio through the encoder
+        encoder_outputs = self.encoder(
+            input_features,
+            attention_mask=attention_mask,
+            head_mask=head_mask,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict
+        )
+
+        # downsample encoder attention mask
+        if attention_mask is not None:
+            audio_attention_mask = self.encoder._get_feature_vector_attention_mask(
+                encoder_outputs[0].shape[1], attention_mask
+            )
+        else:
+            audio_attention_mask = None
+
+        decoder_output = self.decoder(
+            input_ids=None,
+            attention_mask=audio_attention_mask,
+            decoder_input_ids=decoder_input_ids, # input_ids
+            decoder_attention_mask=decoder_attention_mask,
+            encoder_outputs=encoder_outputs,
+            head_mask=head_mask,
+            cross_attn_head_mask=cross_attn_head_mask,
+            past_key_values=past_key_values,
+            labels=labels,
+            use_cache=use_cache,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=True,
+        )
+
+        return decoder_output
+
+
+    @torch.no_grad()
+    def generate(
+        self,
+        input_features: torch.FloatTensor,
+        attention_mask: Optional[torch.LongTensor] = None,
+        **generate_kwargs,
+    ) -> torch.LongTensor:
+
+        batch_size = input_features.shape[0]
+
+        # 1. forward the audio through the encoder
+        encoder_outputs = self.encoder(
+            input_features,
+            attention_mask=attention_mask,
+            return_dict=True
+        )
+
+        audio_embeds = encoder_outputs[0]
+
+        # downsample encoder attention mask
+        if attention_mask is not None:
+            audio_attention_mask = self.encoder._get_feature_vector_attention_mask(
+                audio_embeds.shape[1], attention_mask
+            )
+        else:
+            audio_attention_mask = None
+
+        decoder_input = (
+            torch.LongTensor([[self.decoder.config.decoder_start_token_id]])
+            .repeat(batch_size, 1).to(audio_embeds.device)
+        )
+
+        attention_mask = torch.ones_like(decoder_input)
+        decoder_output = self.decoder.generate(
+            input_ids=None, # input_ids
+            attention_mask=audio_attention_mask,
+            decoder_input_ids=decoder_input, # input_ids
+            decoder_attention_mask=attention_mask,
+            encoder_outputs=encoder_outputs,
+            **generate_kwargs,
+        )
+        return decoder_output
+

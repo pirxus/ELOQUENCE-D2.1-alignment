@@ -26,6 +26,7 @@ from utilities.training_arguments import (
     ModelArguments,
     QFormerArguments
 )
+from utilities.training_utils import AdditionalLossTrackerTrainer
 
 from models.qformer_speech_encoder_lm import (
         SpeechQFormerEncoderDecoderConfig,
@@ -43,7 +44,7 @@ if __name__ == "__main__":
 
     # 0. prepare the how2 dataset object..
     # 1. Collect, preprocess dataset and extract evaluation dataset
-    dataset = get_dataset(
+    dataset, training_eval_dataset = get_dataset(
         datasets_creation_config_path=data_args.datasets_creation_config,
         dataset_name=data_args.dataset_name,
         dataset_config=data_args.dataset_config,
@@ -58,22 +59,13 @@ if __name__ == "__main__":
         audio_column=data_args.audio_column_name,
         train_split=data_args.train_split,
         validation_split=data_args.validation_split,
-        unk_token=data_args.unk_token,
-        fix_apostrophes=data_args.fix_apostrophes,
-        remove_train_unks=data_args.remove_train_unks,
-        do_lower_case=data_args.do_lower_case,
-        remove_punctuation=data_args.remove_punctuation,
-        remove_commas_stops=data_args.remove_commas_stops,
-        remove_listed_chars=data_args.remove_listed_chars,
-        lcrm=data_args.lcrm,
+        text_transformations=data_args.text_transformations,
+        split_long_segments_to_chunks=data_args.split_long_segments_to_chunks,
+        validation_slice_str=data_args.validation_slice,
+        cut_validation_from_train=data_args.cut_validation_from_train,
+        seed=data_args.validation_slice_seed,
+        reshuffle_at_start=data_args.reshuffle_at_start,
     )
-
-    if data_args.validation_slice:
-        training_eval_dataset = dataset[data_args.validation_split].shuffle().select(range(data_args.validation_slice))
-        # Ensure that transformations are also attached to the sliced validation dataset
-        dataset[data_args.validation_split + str(data_args.validation_slice)] = training_eval_dataset
-    else:
-        training_eval_dataset = dataset[data_args.validation_split]
 
     logger.info(f"Dataset processed successfully.{dataset}")
 
@@ -113,6 +105,8 @@ if __name__ == "__main__":
                 qformer=qformer_config,
                 decoder=decoder.config,
                 num_query_tokens=qformer_args.n_queries,
+                mm_pooling=qformer_args.qf_mm_pooling,
+                mm_loss_weight=qformer_args.qf_mm_loss_weight,
                 decoder_pad_token_id=0, # FIXME: token ids
                 bos_token_id=0,
                 eos_token_id=0,
@@ -163,7 +157,8 @@ if __name__ == "__main__":
     )
 
     # 7. Initialize trainer
-    trainer = Seq2SeqTrainer(
+    trainer_class = AdditionalLossTrackerTrainer if qformer_args.qf_mm_loss_weight > 0 else Seq2SeqTrainer
+    trainer = trainer_class(
         args=training_args,
         model=model,
         callbacks=callbacks,

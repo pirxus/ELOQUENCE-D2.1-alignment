@@ -41,14 +41,30 @@ class EncoderFreezer(TrainerCallback):
 
     def freeze_encoder(self, model):
         logger.info("Freezing the encoder")
-        for _, param in model.model.encoder.named_parameters():
-            param.requires_grad = False
+        try:
+            for _, param in model.model.encoder.named_parameters():
+                param.requires_grad = False
+        except:
+            for _, param in model.encoder.named_parameters():
+                param.requires_grad = False
+
 
     def unfreeze_encoder(self, model):
         logger.info("Unfreezing the encoder")
-        for _, param in model.model.encoder.named_parameters():
-            param.requires_grad = True
+        try:
+            for _, param in model.model.encoder.named_parameters():
+                param.requires_grad = True
+        except:
+            for _, param in model.encoder.named_parameters():
+                param.requires_grad = True
 
+class QFormerModelEvalCallback(TrainerCallback):
+    def on_epoch_begin(self, args, state, control, model, **kwargs):
+        logger.info("QFormer: putting encoder and decoder into eval mode")
+        try:
+            model.encoder_decoder_eval()
+        except:
+            logger.info("QFormer: eval mode failed")
 
 class GumbelTemperatureCallback(TrainerCallback):
     def __init__(self, gumbel_temperature_decay: float, min_gumbel_temperature: float, max_gumbel_temperature: float):
@@ -214,4 +230,6 @@ def init_callbacks(
         callbacks.append(AdditionalLossPrinterCallback())
     if training_args.freeze_encoder_epochs:
         callbacks.append(EncoderFreezer(training_args.freeze_encoder_epochs))
+    if training_args.qformer_eval_callback:
+        callbacks.append(QFormerModelEvalCallback())
     return callbacks
