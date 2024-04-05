@@ -1,15 +1,17 @@
 #!/bin/bash
-#$ -N qf_mt_6l_128_no_mm_lr_long_init_cb
+#$ -N s2t_marian_slt_baseline_fixed
 #$ -q long.q@supergpu*
 #$ -l ram_free=40G,mem_free=40G
 #$ -l matylda6=0.5
 #$ -l ssd=1,ssd_free=200G
 #$ -l gpu=1,gpu_ram=20G
-#$ -o /mnt/matylda6/xsedla1h/projects/job_logs/qformer/qf_mt_6l_128_no_mm_lr_long_init_cb.o
-#$ -e /mnt/matylda6/xsedla1h/projects/job_logs/qformer/qf_mt_6l_128_no_mm_lr_long_init_cb.e
+#$ -o /mnt/matylda6/xsedla1h/projects/job_logs/qformer/s2t_marian_slt_baseline_fixed.o
+#$ -e /mnt/matylda6/xsedla1h/projects/job_logs/qformer/s2t_marian_slt_baseline_fixed.e
 #
+#
+## used to train a joint SLT model with a S2T encoder and MarianMT decoder
 
-EXPERIMENT="qf_mt_6l_128_no_mm_lr_long_init_cb"
+EXPERIMENT="s2t_marian_slt_baseline_fixed"
 
 # Job should finish in about 1 day
 ulimit -t 100000
@@ -52,7 +54,7 @@ export HF_HOME="/mnt/matylda6/xsedla1h/hugging-face"
 
 export WANDB_MODE=offline
 export WANDB_RUN_ID=$EXPERIMENT
-export WANDB_PROJECT="qformer"
+export WANDB_PROJECT="slt_baseline"
 
 mkdir -p /mnt/ssd/xsedla1h/$EXPERIMENT
 echo "Copying data to ssd.."
@@ -70,20 +72,20 @@ args=(
   --per_device_train_batch_size="64" # 64
   --per_device_eval_batch_size="32"
   --dataloader_num_workers="4"
-  --num_train_epochs="70"
+  --num_train_epochs="40"
   --group_by_length="True"
   --bf16 # FIXME
   --do_train
   --do_evaluate
   --load_best_model_at_end
-  --qformer_eval_callback
+  --freeze_encoder_epochs="8"
 
   #--restart_from="/mnt/matylda6/xsedla1h/projects/huggingface_asr/exp/s2t_50ep_no_pert_cont/checkpoint-21270"
 
   # Optimizer related arguments
   --optim="adamw_torch"
-  --learning_rate="2e-4"
-  --warmup_steps="15000"
+  --learning_rate="1e-3"
+  --warmup_steps="10000"
   --early_stopping_patience="10"
   --weight_decay="1e-5"
   --max_grad_norm="5.0"
@@ -99,7 +101,7 @@ args=(
   --greater_is_better="True"
   --metric_for_best_model="eval_bleu"
   --save_total_limit="5"
-  --track_ctc_loss
+  #--track_ctc_loss
 
   # Data related arguments
   #--dataset_name="/home/pirx/Devel/masters/APMo-SLT/src/huggingface_asr/src/dataset_builders/how2_dataset"
@@ -125,10 +127,10 @@ args=(
   --feature_extractor_name="pirxus/features_fbank_80"
   --base_encoder_model="/mnt/matylda6/xsedla1h/projects/huggingface_asr/exp/s2t_fixed_v2_1d/average_checkpoint/"
   --base_decoder_model="/mnt/matylda6/xsedla1h/projects/huggingface_asr/exp/mt_marian_bpe/checkpoint-69360/"
-  --n_queries=128
+  --n_queries=60
   --qf_n_layers=6
-  --qf_mm_loss_weight="0.0"
-  --qf_mm_pooling="avg"
+  --qf_mm_loss_weight="1.0"
+  --qf_mm_pooling="max"
 
   # Generation related arguments
   --num_beams="10"
@@ -139,7 +141,7 @@ args=(
 )
 
 echo "Running training.."
-python src/trainers/train_qformer_slt.py "${args[@]}"
+python src/trainers/train_s2t_marian_slt.py "${args[@]}"
 
 # delete the ssd directory
 echo "Cleaning the ssd directory.."

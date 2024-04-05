@@ -9,6 +9,8 @@
 #$ -e /mnt/matylda6/xsedla1h/projects/job_logs/slt/slt_final_init.e
 #
 
+EXPERIMENT="merge_test"
+
 # Job should finish in about 1 day
 ulimit -t 100000
 
@@ -28,7 +30,6 @@ unset PYTHONPATH
 unset PYTHONHOME
 source /mnt/matylda6/xsedla1h/miniconda3/bin/activate /mnt/matylda6/xsedla1h/envs/huggingface_asr
 
-EXPERIMENT="slt_final_init"
 
 WORK_DIR="/mnt/matylda6/xsedla1h/projects/huggingface_asr"
 EXPERIMENT_PATH="${WORK_DIR}/exp/${EXPERIMENT}"
@@ -44,12 +45,6 @@ cd $WORK_DIR || {
 # set pythonpath so that python works
 export PYTHONPATH="${PYTHONPATH}:${WORK_DIR}/src"
 
-# get the gpu
-export CUDA_VISIBLE_DEVICES=$(free-gpus.sh 1) || {
-  echo "Could not obtain GPU."
-  exit 1
-}
-
 export TRANSFORMERS_OFFLINE=1
 export HF_DATASETS_OFFLINE=1
 export HF_HUB_OFFLINE=1
@@ -57,11 +52,17 @@ export HF_HOME="/mnt/matylda6/xsedla1h/hugging-face"
 
 export WANDB_MODE=offline
 export WANDB_RUN_ID=$EXPERIMENT
-export WANDB_PROJECT="S2T-asr"
+export WANDB_PROJECT="null"
 
 mkdir -p /mnt/ssd/xsedla1h/$EXPERIMENT
 echo "Copying data to ssd.."
 cp -r $HOW2_BASE /mnt/ssd/xsedla1h/${EXPERIMENT}
+#
+# get the gpu
+export CUDA_VISIBLE_DEVICES=$(free-gpus.sh 1) || {
+  echo "Could not obtain GPU."
+  exit 1
+}
 
 
 args=(
@@ -70,7 +71,7 @@ args=(
   --per_device_train_batch_size="64" # 64
   --per_device_eval_batch_size="32"
   --dataloader_num_workers="4"
-  --num_train_epochs="70"
+  --num_train_epochs="50"
   --group_by_length="True"
   --bf16 # FIXME
   --do_train

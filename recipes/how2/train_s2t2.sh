@@ -5,8 +5,10 @@
 #$ -l matylda6=0.5
 #$ -l ssd=1,ssd_free=200G
 #$ -l gpu=1,gpu_ram=40G
-#$ -o /mnt/matylda6/xsedla1h/projects/job_logs/w2v2_s2t2_joint_2.o
-#$ -e /mnt/matylda6/xsedla1h/projects/job_logs/w2v2_s2t2_joint_2.e
+#$ -o /mnt/matylda6/xsedla1h/projects/job_logs/s2t_ctc_asr/w2v2_s2t2_joint_2.o
+#$ -e /mnt/matylda6/xsedla1h/projects/job_logs/s2t_ctc_asr/w2v2_s2t2_joint_2.e
+
+EXPERIMENT="w2v2_s2t2_joint_2"
 
 
 # Job should finish in 1 days
@@ -28,7 +30,6 @@ unset PYTHONPATH
 unset PYTHONHOME
 source /mnt/matylda6/xsedla1h/miniconda3/bin/activate /mnt/matylda6/xsedla1h/envs/huggingface_asr
 
-EXPERIMENT="w2v2_s2t2_joint_2"
 
 WORK_DIR="/mnt/matylda6/xsedla1h/projects/huggingface_asr"
 EXPERIMENT_PATH="${WORK_DIR}/exp/${EXPERIMENT}"
@@ -44,12 +45,6 @@ cd $WORK_DIR || {
 # set pythonpath so that python works
 export PYTHONPATH="${PYTHONPATH}:${WORK_DIR}/src"
 
-# get the gpu
-export CUDA_VISIBLE_DEVICES=$(free-gpus.sh 1) || {
-  echo "Could not obtain GPU."
-  exit 1
-}
-
 export TRANSFORMERS_OFFLINE=1
 export HF_DATASETS_OFFLINE=1
 export HF_HUB_OFFLINE=1
@@ -63,6 +58,13 @@ mkdir -p /mnt/ssd/xsedla1h/$EXPERIMENT
 echo "Copying data to ssd.."
 rm -rf /mnt/ssd/xsedla1h/how2
 cp -r $HOW2_BASE /mnt/ssd/xsedla1h/${EXPERIMENT}
+
+# get the gpu
+export CUDA_VISIBLE_DEVICES=$(free-gpus.sh 1) || {
+  echo "Could not obtain GPU."
+  exit 1
+}
+
 
 args=(
   # General training arguments
@@ -128,13 +130,12 @@ args=(
   --expect_2d_input
   --config_overrides="ctc_zero_infinity=True"
 
-
   # Generation related arguments
   --num_beams="5"
   --max_length="150"
   --predict_with_generate
   --decoding_ctc_weight="0.3"
-  --eval_beam_factor="2"
+  --eval_beam_factor="1"
 )
 
 echo "Running training.."

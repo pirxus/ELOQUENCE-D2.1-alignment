@@ -9,7 +9,8 @@
 #$ -e /mnt/matylda6/xsedla1h/projects/job_logs/mt_eval/mt_marian_bpe_best_eval_sacre.e
 #
 
-EXPERIMENT="mt_marian_bpe_best_sacre"
+#EXPERIMENT="mt_marian_bpe_best_sacre"
+EXPERIMENT="mt_marian_test"
 
 # Job should finish in about 1 day
 ulimit -t 100000
@@ -34,7 +35,8 @@ source /mnt/matylda6/xsedla1h/miniconda3/bin/activate /mnt/matylda6/xsedla1h/env
 WORK_DIR="/mnt/matylda6/xsedla1h/projects/huggingface_asr"
 EXPERIMENT_PATH="${WORK_DIR}/exp/${EXPERIMENT}"
 RECIPE_DIR="${WORK_DIR}/recipes/how2"
-HOW2_BASE="/mnt/scratch/tmp/kesiraju/how2"
+#HOW2_BASE="/mnt/scratch/tmp/kesiraju/how2"
+HOW2_BASE="/mnt/matylda6/xsedla1h/data/how2_text"
 HOW2_PATH="/mnt/ssd/xsedla1h/${EXPERIMENT}/how2"
 
 cd $WORK_DIR || {

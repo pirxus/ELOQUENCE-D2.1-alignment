@@ -1,15 +1,15 @@
 #!/bin/bash
-#$ -N qf_gpt_6l_256
+#$ -N qf_gpt_4l_768_80q_mm_avg
 #$ -q long.q@supergpu*
 #$ -l ram_free=40G,mem_free=40G
 #$ -l matylda6=0.5
 #$ -l ssd=1,ssd_free=200G
 #$ -l gpu=1,gpu_ram=20G
-#$ -o /mnt/matylda6/xsedla1h/projects/job_logs/qformer/qf_gpt_6l_256.o
-#$ -e /mnt/matylda6/xsedla1h/projects/job_logs/qformer/qf_gpt_6l_256.e
+#$ -o /mnt/matylda6/xsedla1h/projects/job_logs/qformer/qf_gpt_6l_256_80q_mm_avg.o
+#$ -e /mnt/matylda6/xsedla1h/projects/job_logs/qformer/qf_gpt_6l_256_80q_mm_avg.e
 #
 
-EXPERIMENT="qf_gpt_6l_256"
+EXPERIMENT="qf_gpt_6l_256_80q_mm_avg"
 
 # Job should finish in about 1 day
 ulimit -t 100000
@@ -71,7 +71,7 @@ args=(
   --per_device_train_batch_size="32" # 64
   --per_device_eval_batch_size="32"
   --dataloader_num_workers="4"
-  --num_train_epochs="20"
+  --num_train_epochs="25"
   --group_by_length="True"
   --bf16 # FIXME
   --do_train
@@ -95,13 +95,14 @@ args=(
   --logging_steps="10"
   --save_strategy="epoch"
   --evaluation_strategy="epoch"
-  --eval_delay=5
+  --eval_delay=8
   #--evaluation_strategy="steps"
   #--eval_steps=20
   --wandb_predictions_to_save=50 # 60
   --greater_is_better="True"
   --metric_for_best_model="eval_bleu"
   --save_total_limit="5"
+  --track_ctc_loss
 
   # Data related arguments
   #--dataset_name="/home/pirx/Devel/masters/APMo-SLT/src/huggingface_asr/src/dataset_builders/how2_dataset"
@@ -133,7 +134,8 @@ args=(
   --qf_hidden_size=256
   --qf_n_attn_heads=4
   --qf_intermediate_size=2048
-
+  --qf_mm_pooling="avg"
+  --qf_mm_loss_weight="1.0"
 
   # Generation related arguments
   --num_beams="5"
