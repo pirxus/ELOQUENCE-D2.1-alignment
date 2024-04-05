@@ -1,10 +1,12 @@
 """Utilities for data loading and preprocessing."""
 import json
+import os
 import re
 import string
-from typing import Dict, List, Union, Optional
+from typing import Dict, List, Optional, Tuple, Union
 
 import numpy as np
+import torch.distributed
 from datasets import (
     Audio,
     Dataset,
@@ -16,9 +18,159 @@ from datasets import (
 )
 from transformers.utils import logging
 
+from utilities.english_normalizer import EnglishNormalizer
+
 logger = logging.get_logger("transformers")
 
+whisper_normalizer = EnglishNormalizer()
+special_tokens = [
+    "([noise])",
+    "([laughter])",
+    "([vocalized noise])",
+    "([hesitation])",
+    "([breath])",
+    "([cough])",
+    "([silence])",
+    "([noise])",
+    "([pause])",
+    "([skip])",
+    "([sneeze])",
+]
+
+spec_tokens_mapping_gigaspeech = {"<COMMA>": ",", "<PERIOD>": ".", "<QUESTIONMARK>": "?", "<EXCLAMATIONMARK>": "!"}
+
+tokens_escaped_regex = re.compile("|".join([r"\s" + re.escape(token) for token in special_tokens]))
+
+MIN_INPUT_LEN = 0.1
+
+
+def get_local_rank():
+    if "LOCAL_RANK" in os.environ:
+        return int(os.environ["LOCAL_RANK"])
+    else:
+        return torch.distributed.get_rank()
+
+
+class DistributedContext:
+    """Context manager for distributed training."""
+
+    def __init__(self):
+        """Initializes distributed context."""
+        self.local_rank = None
+        self.world_size = None
+
+    def __enter__(self):
+        """Initializes distributed context."""
+        if torch.distributed.is_available() and torch.distributed.is_initialized():
+            self.local_rank = get_local_rank()
+            self.global_rank = torch.distributed.get_rank()
+            self.world_size = torch.distributed.get_world_size()
+        else:
+            self.local_rank = 0
+            self.global_rank = 0
+            self.world_size = 1
+        return self
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        """Performs barrier synchronization."""
+        if self.world_size > 1:
+            torch.distributed.barrier()
+
+    def wait_before(self):
+        if self.world_size > 1:
+            if self.local_rank > 0:
+                logger.info(f"Rank {self.global_rank}: Waiting for main process to perform operation.")
+                torch.distributed.barrier()
+
+    def wait_after(self):
+        if self.world_size > 1:
+            if self.local_rank == 0:
+                logger.info(f"Rank {self.local_rank}: Waiting for other processes to finish operation.")
+                torch.distributed.barrier()
+
+
+def distributed_process(dataset, process_by, **kwargs):
+    """Performs distributed processing of dataset."""
+    with DistributedContext() as context:
+        context.wait_before()
+        mapped_dataset = getattr(dataset, process_by)(**kwargs)
+        context.wait_after()
+    return mapped_dataset
+
+
+"""
+
+Text manipulation functions.
+
+"""
+
+
+def do_lower_case(example: str, label_column: str) -> Dict[str, str]:
+    """Lower cases batch."""
+    return {label_column: example.lower()}
+
+
+def remove_punctuation(example: str, label_column: str) -> Dict[str, str]:
+    """Removes punctuation."""
+    return {label_column: re.sub(r"[!\"#$%&\'()*+,.\/\\:;<=>?@\[\]^_`{|}~]", "", example)}
+
+
+def lcrm(example: str, label_column: str) -> Dict[str, str]:
+    """Lowercases and removes punctuation (except apostrophes -- lcrm)."""
+    return {label_column: example.translate(str.maketrans("", "", string.punctuation.replace("'", ""))).lower()}
+
+
+def remove_multiple_whitespaces_and_strip(example: str, label_column: str) -> Dict[str, str]:
+    """Removes multiple whitespaces from batch."""
+    return {label_column: re.sub(r"\s+", " ", example).strip()}
+
+
+def clean_special_tokens_english(example: str, label_column: str) -> Dict[str, str]:
+    """Cleans special tokens from labels."""
+    return {label_column: tokens_escaped_regex.sub("", example)}
+
+
+def transforms_unfinished_words_to_unks(example: str, label_column: str) -> Dict[str, str]:
+    """Transforms unfinished words to UNKs."""
+    return {label_column: re.sub(r"\(?\w+-\)?", "([unk])", example)}
+
+
 tedlium_contractions = [" 's", " 't", " 're", " 've", " 'm", " 'll", " 'd", " 'clock", " 'all"]
+
+
+def fix_tedlium_apostrophes(example: str, label_column: str) -> Dict[str, str]:
+    for contraction in tedlium_contractions:
+        example = example.replace(contraction, contraction[1:])
+    return {label_column: example.replace(r"\s+ '", r" '")}
+
+
+def filter_empty_transcriptions(example: str) -> bool:
+    """Filters out empty transcriptions."""
+    return example != ""
+
+
+def filter_tedlium_empty_labels(example: str) -> bool:
+    """Filters out empty transcriptions."""
+    return example != "ignore_time_segment_in_scoring"
+
+
+def whisper_normalize_english(example: str, label_column: str) -> Dict[str, str]:
+    """Normalizes text using adapted whisper normalizer."""
+    return {label_column: whisper_normalizer(example)}
+
+
+def map_gigaspeech_spec_tokens(example: str, label_column: str) -> Dict[str, str]:
+    """Maps special tokens from GigaSpeech to common ones."""
+    for token, replacement in spec_tokens_mapping_gigaspeech.items():
+        example = example.replace(token, replacement)
+    return {label_column: example}
+
+
+"""
+
+Audio manipulation functions.
+
+"""
 
 
 def audio_object_stripper(audio: Union[Dict, np.ndarray, List[float]], key="array"):
@@ -28,10 +180,35 @@ def audio_object_stripper(audio: Union[Dict, np.ndarray, List[float]], key="arra
     return trimmed
 
 
-def filter_sequences_in_range_batched(batch: List[int], max_input_len: int, min_input_len: int) -> List[bool]:
+def split_long_segments_to_chunks_fun(
+    audios: List[Dict],
+    lens: List[float],
+    audio_column: str,
+    length_column_name: str,
+    max_input_len: float,
+    sampling_rate: int,
+) -> Dict[str, List[List[float]]]:
+    audio_encoder = Audio(sampling_rate=sampling_rate, mono=True)
+    chunks = []
+    lens_new = []
+    for index, example_len in enumerate(lens):
+        for i in range(0, len(audios[index]["array"]), int(max_input_len * sampling_rate)):
+            new_chunk = audio_object_stripper(audios[index])[i : i + int(max_input_len * sampling_rate)]
+            chunks.append(audio_encoder.encode_example({"array": new_chunk, "sampling_rate": sampling_rate}))
+            lens_new.append(len(new_chunk) / sampling_rate)
+    return {audio_column: chunks, length_column_name: lens_new}
+
+
+def filter_sequences_in_range_batched(batch: List[float], max_input_len: float, min_input_len: float) -> List[bool]:
     """Filters out sequences form dataset which are in bounds."""
     arr = np.array(batch)
     return (arr <= max_input_len) & (arr >= min_input_len)
+
+
+def filter_zero_length_audio_batched(lens: List[List[float]]) -> List[bool]:
+    """Filters out sequences form dataset which are in bounds."""
+    arr = np.array(lens)
+    return arr != 0.0
 
 
 def extract_lens_batched(audios: List[List[float]], len_column: str, sampling_rate: int) -> Dict[str, List[float]]:
@@ -39,88 +216,6 @@ def extract_lens_batched(audios: List[List[float]], len_column: str, sampling_ra
     lens = [len(audio_object_stripper(example)) / sampling_rate for example in audios]
     batch = {len_column: lens}
     return batch
-
-
-def filter_wrongly_annotated_segments_batched(batch: List[str]) -> List[bool]:
-    """Filters out segments which are wrongly annotated."""
-    return list(map(lambda x: x != "ignore_time_segment_in_scoring", batch))
-
-
-def remove_unks_batched(batch: List[str], unk_token: str, label_column: str) -> Dict[str, List[str]]:
-    """Removes UNK tokens from dataset."""
-    return {label_column: [sequence.replace(unk_token, "") for sequence in batch]}
-
-
-def replace_contractions(text: str) -> str:
-    """Replaces contractions in text."""
-    for contraction in tedlium_contractions:
-        text = text.replace(contraction, contraction[1:])
-    return text
-
-
-def fix_apostrophes_batched(batch: List[str], label_column: str) -> Dict[str, List[str]]:
-    """Fixes apostrophes in dataset."""
-    return {label_column: [replace_contractions(sequence).replace(r"\s+ '", r" '") for sequence in batch]}
-
-
-def filter_empty_transcriptions(batch: List[str]) -> List[bool]:
-    """Filters out empty transcriptions."""
-    return [example != "" for example in batch]
-
-
-def preprocess_cv_labels(batch: List[str], label_column: str) -> Dict[str, List[str]]:
-    """Preprocesses labels for commonvoice dataset."""
-    processed = []
-    for transcription in batch:
-        if transcription.startswith('"') and transcription.endswith('"'):
-            # we can remove trailing quotation marks as they do not affect the transcription
-            transcription = transcription[1:-1]
-
-        transcription = transcription.replace(r"[,.?!:;]", "")
-        transcription = transcription.replace('""', '"')
-        processed.append(transcription)
-
-    return {label_column: processed}
-
-
-def filter_out_sequence_from_dataset(
-    dataset: Dataset, max_input_len: float = 5.0, min_input_len: float = 0.1, length_column="input_len"
-) -> Dataset:
-    """Filters out sequences form dataset which are longer than provided threshold"""
-    lengths = np.array(dataset[length_column])
-    indexes_ok = np.argwhere(np.logical_and(lengths <= max_input_len, lengths >= min_input_len))
-    dataset = dataset.select(indexes_ok.flatten())
-    return dataset
-
-
-def do_lower_case_batched(batch: List[str], label_column: str) -> Dict[str, List[str]]:
-    """Lower cases batch."""
-    return {label_column: [example.lower() for example in batch]}
-
-
-def remove_punctuation_batched(batch: List[str], label_column: str) -> Dict[str, List[str]]:
-    """Removes punctuation from batch."""
-    return {label_column: [example.translate(str.maketrans("", "", string.punctuation)) for example in batch]}
-
-
-def lcrm_batched(batch: List[str], label_column: str) -> Dict[str, List[str]]:
-    """Removes punctuation (except apostrophes -- lcrm) from batch."""
-    return {label_column: [example.translate(str.maketrans("", "", string.punctuation.replace("'", ""))) for example in batch]}
-
-
-def remove_listed_chars_batched(batch: List[str], label_column: str, chars: str) -> Dict[str, List[str]]:
-    """Removes characters specified in the 'chars' string from batch."""
-    return {label_column: [example.translate(str.maketrans("", "", chars)) for example in batch]}
-
-
-def remove_commas_stops_batched(batch: List[str], label_column: str) -> Dict[str, List[str]]:
-    """Removes commas and full stops from batch."""
-    return {label_column: [example.translate(str.maketrans("", "", ",.")) for example in batch]}
-
-
-def remove_multiple_whitespaces_and_strip_batched(batch: List[str], label_column: str) -> Dict[str, List[str]]:
-    """Removes multiple whitespaces from batch."""
-    return {label_column: [re.sub(r"\s+", " ", example).strip() for example in batch]}
 
 
 def prepare_dataset(
@@ -132,161 +227,138 @@ def prepare_dataset(
     preprocessing_num_workers: int,
     writer_batch_size: int,
     train_split: str,
-    fix_apostrophes: bool,
-    remove_train_unks: bool,
-    do_lower_case: bool,
-    remove_punctuation: bool,
-    unk_token: str,
+    text_transformations: Optional[List[str]],
+    split_long_segments_to_chunks: bool,
     sampling_rate: int,
     max_input_len: float,
     min_input_len: float,
-    remove_commas_stops: bool = False,
-    skip_audio_processing: bool = False,
-    remove_listed_chars: Optional[str] = None,
-    lcrm: bool = False,
+    reshuffle_at_start: bool,
+    skip_audio_processing: bool,
 ) -> DatasetDict:
     """Preprocesses dataset."""
+    if reshuffle_at_start:
+        with DistributedContext() as context:
+            context.wait_before()
+            dataset = dataset.shuffle(seed=42)
+            context.wait_after()
+
     if not skip_audio_processing:
-        if length_column_name not in set().union(*dataset.column_names.values()) or "kaldi_dataset" in dataset_name:
-            logger.info(f"Extracting audio lens.")
-            dataset = dataset.map(
-                extract_lens_batched,
+        if audio_column_name is not None and split_long_segments_to_chunks:
+            if length_column_name is not None and length_column_name not in set().union(*dataset.column_names.values()):
+                dataset = distributed_process(
+                    dataset,
+                    process_by="map",
+                    function=extract_lens_batched,
+                    num_proc=preprocessing_num_workers,
+                    input_columns=[audio_column_name],
+                    batched=True,
+                    batch_size=writer_batch_size // 4,
+                    writer_batch_size=writer_batch_size,
+                    fn_kwargs={"sampling_rate": sampling_rate, "len_column": length_column_name},
+                    desc="Extracting audio lens",
+                )
+            dataset = distributed_process(
+                dataset,
+                process_by="map",
+                function=split_long_segments_to_chunks_fun,
+                num_proc=preprocessing_num_workers,
+                input_columns=[audio_column_name, length_column_name],
+                batched=True,
+                batch_size=writer_batch_size // 4,
+                remove_columns=dataset.column_names[train_split],
+                writer_batch_size=writer_batch_size,
+                fn_kwargs={
+                    "audio_column": audio_column_name,
+                    "length_column_name": length_column_name,
+                    "max_input_len": max_input_len,
+                    "sampling_rate": sampling_rate,
+                },
+                desc=f"Splitting segments to chunks of size {max_input_len}s",
+            )
+
+        # 1. Preprocess audio columns
+        if (
+            length_column_name is not None
+            and length_column_name not in set().union(*dataset.column_names.values())
+            or "kaldi_dataset" in dataset_name
+        ):
+            dataset = distributed_process(
+                dataset,
+                process_by="map",
+                function=extract_lens_batched,
                 num_proc=preprocessing_num_workers,
                 input_columns=[audio_column_name],
                 batched=True,
+                batch_size=writer_batch_size // 4,
                 writer_batch_size=writer_batch_size,
                 fn_kwargs={"sampling_rate": sampling_rate, "len_column": length_column_name},
+                desc="Extracting audio lens",
             )
 
-        if train_split is not None:
-            logger.info(f"Filtering out too long and too short sequences from dataset.")
-            dataset[train_split] = dataset[train_split].filter(
-                filter_sequences_in_range_batched,
+        if length_column_name is not None and train_split is not None:
+            dataset[train_split] = distributed_process(
+                dataset[train_split],
+                process_by="filter",
+                function=filter_sequences_in_range_batched,
                 batched=True,
                 input_columns=[length_column_name],
                 num_proc=preprocessing_num_workers,
                 writer_batch_size=writer_batch_size,
                 fn_kwargs={"max_input_len": max_input_len, "min_input_len": min_input_len},
+                desc="Filtering out too long and too short sequences",
             )
 
-    if do_lower_case:
-        logger.info(f"Lower casing dataset.")
-        dataset = dataset.map(
-            do_lower_case_batched,
-            input_columns=[text_column_name],
-            batched=True,
-            num_proc=preprocessing_num_workers,
-            writer_batch_size=writer_batch_size,
-            fn_kwargs={"label_column": text_column_name},
-        )
-
-    if remove_punctuation:
-        logger.info(f"Removing punctuation from dataset.")
-        dataset = dataset.map(
-            remove_punctuation_batched,
-            input_columns=[text_column_name],
-            batched=True,
-            num_proc=preprocessing_num_workers,
-            writer_batch_size=writer_batch_size,
-            fn_kwargs={"label_column": text_column_name},
-        )
-
-    if lcrm:
-        logger.info(f"Removing punctuation (except apostrophes -- lcrm) from dataset.")
-        dataset = dataset.map(
-            lcrm_batched,
-            input_columns=[text_column_name],
-            batched=True,
-            num_proc=preprocessing_num_workers,
-            writer_batch_size=writer_batch_size,
-            fn_kwargs={"label_column": text_column_name},
-        )
-
-    if remove_listed_chars:
-        logger.info(f"Removing specified characters from dataset.")
-        dataset = dataset.map(
-            remove_listed_chars_batched,
-            input_columns=[text_column_name],
-            batched=True,
-            num_proc=preprocessing_num_workers,
-            writer_batch_size=writer_batch_size,
-            fn_kwargs={"label_column": text_column_name, "chars": remove_listed_chars},
-        )
-
-    if remove_commas_stops:
-        logger.info(f"Removing commas and full stops from dataset.")
-        dataset = dataset.map(
-            remove_commas_stops_batched,
-            input_columns=[text_column_name],
-            batched=True,
-            num_proc=preprocessing_num_workers,
-            writer_batch_size=writer_batch_size,
-            fn_kwargs={"label_column": text_column_name},
-        )
-
-    logger.info(f"Filtering unlabeled data from dataset.")
-    dataset = dataset.filter(
-        filter_wrongly_annotated_segments_batched,
-        batched=True,
-        input_columns=[text_column_name],
-        writer_batch_size=writer_batch_size,
-        num_proc=preprocessing_num_workers,
-    )
-    dataset = dataset.filter(
-        filter_empty_transcriptions,
-        input_columns=[text_column_name],
-        batched=True,
-        writer_batch_size=writer_batch_size,
-        num_proc=preprocessing_num_workers,
-    )
-
-    if train_split is not None and remove_train_unks:
-        logger.info(f"Removing UNKs from training data.")
-        dataset[train_split] = dataset[train_split].map(
-            remove_unks_batched,
-            batched=True,
-            input_columns=[text_column_name],
-            num_proc=preprocessing_num_workers,
-            writer_batch_size=writer_batch_size,
-            fn_kwargs={"unk_token": unk_token, "label_column": text_column_name},
-        )
-
-    if fix_apostrophes:
-        logger.info(f"Fixing apostrophes in dataset.")
-        dataset = dataset.map(
-            fix_apostrophes_batched,
-            input_columns=[text_column_name],
-            batched=True,
-            num_proc=preprocessing_num_workers,
-            writer_batch_size=writer_batch_size,
-            fn_kwargs={"label_column": text_column_name},
-        )
-
-    if dataset_name == "mozilla-foundation/common_voice_13_0":
-        logger.info(f"Fixing labels for commonvoice.")
-        dataset = dataset.map(
-            preprocess_cv_labels,
-            input_columns=[text_column_name],
-            batched=True,
-            writer_batch_size=writer_batch_size,
-            num_proc=preprocessing_num_workers,
-            fn_kwargs={"label_column": text_column_name},
-        )
-
-    logger.info("Striping and removing multiple spaces.")
-    dataset = dataset.map(
-        remove_multiple_whitespaces_and_strip_batched,
-        input_columns=[text_column_name],
-        batched=True,
-        num_proc=preprocessing_num_workers,
-        writer_batch_size=writer_batch_size,
-        fn_kwargs={"label_column": text_column_name},
-    )
+    # 2. Preprocess label columns
+    if text_column_name is not None and text_transformations is not None:
+        for transformation_name in text_transformations:
+            if transformation_name.startswith("filter_"):
+                process_by = "filter"
+                fn_kwargs = {}
+            else:
+                process_by = "map"
+                fn_kwargs = {"label_column": text_column_name}
+            if transformation_name.endswith("_train"):
+                if train_split is not None:
+                    transformation = globals()[re.sub("_train", "", transformation_name)]
+                    dataset[train_split] = distributed_process(
+                        dataset[train_split],
+                        process_by=process_by,
+                        function=transformation,
+                        input_columns=[text_column_name],
+                        num_proc=preprocessing_num_workers,
+                        writer_batch_size=writer_batch_size,
+                        fn_kwargs=fn_kwargs,
+                        desc=f"Applying {transformation_name} transformation",
+                    )
+            else:
+                transformation = globals()[transformation_name]
+                dataset = distributed_process(
+                    dataset,
+                    process_by=process_by,
+                    function=transformation,
+                    input_columns=[text_column_name],
+                    num_proc=preprocessing_num_workers,
+                    writer_batch_size=writer_batch_size,
+                    fn_kwargs=fn_kwargs,
+                    desc=f"Applying {transformation_name} transformation",
+                )
 
     if not skip_audio_processing:
-        logger.info("Casting audio column to Audio.")
-        dataset = dataset.cast_column(audio_column_name, Audio(sampling_rate=sampling_rate))
-        dataset = dataset.cast_column(length_column_name, Value(dtype="float32"))
+        logger.info("Casting audio column to Audio, and length column to float32")
+        feature_types = dataset[list(dataset.keys())[0]].features
+        if audio_column_name is not None:
+            feature_types[audio_column_name] = Audio(sampling_rate=sampling_rate)
+        if length_column_name is not None:
+            feature_types[length_column_name] = Value(dtype="float32")
+        for split in dataset:
+            dataset[split] = distributed_process(
+                dataset[split],
+                process_by="cast",
+                writer_batch_size=writer_batch_size,
+                num_proc=preprocessing_num_workers,
+                features=feature_types,
+            )
+
     logger.info(str(dataset))
     return dataset
 
@@ -340,60 +412,72 @@ def load_multiple_datasets(
     global_audio_column: str,
     global_train_split: str,
     global_validation_split: str,
+    split_long_segments_to_chunks: bool,
 ) -> DatasetDict:
     """Loads multiple datasets, preprocess them and join to single dataset instance."""
     with open(config_path) as config_handle:
         config_dict = json.load(config_handle)
     dataset_merged = DatasetDict()
     for dataset_config in config_dict:
-        logger.info(f"Loading dataset {dataset_config['dataset_name']}")
-        if dataset_config["load_from_disk"]:
-            dataset = load_from_disk(
-                dataset_config["dataset_name"], keep_in_memory=False, **dataset_config["additional_args"]
-            )
+        logger.info(f"Loading dataset {dataset_config['dataset_name']} {dataset_config['dataset_id']}")
+        with DistributedContext() as context:
+            context.wait_before()
+            if dataset_config["load_from_disk"]:
+                dataset = load_from_disk(
+                    dataset_config["dataset_name"],
+                    keep_in_memory=False,
+                    **dataset_config["additional_args"],
+                )
 
-        else:
-            dataset = load_dataset(
-                dataset_config["dataset_name"],
-                keep_in_memory=False,
-                num_proc=num_proc,
-                **dataset_config["additional_args"],
-            )
+            else:
+                dataset = load_dataset(
+                    dataset_config["dataset_name"],
+                    keep_in_memory=False,
+                    writer_batch_size=writer_batch_size,
+                    num_proc=num_proc,
+                    **dataset_config["additional_args"],
+                )
+            context.wait_after()
         new_train_split_name = global_train_split if len(dataset_config["train_splits"]) > 0 else None
-        new_dev_split_name = global_validation_split if len(dataset_config["dev_splits"]) > 0 else None
+        new_dev_split_name = global_validation_split if len(dataset_config["validation_splits"]) > 0 else None
         dataset = merge_splits(dataset, dataset_config["train_splits"], new_train_split_name)
-        dataset = merge_splits(dataset, dataset_config["dev_splits"], new_dev_split_name)
+        dataset = merge_splits(dataset, dataset_config["validation_splits"], new_dev_split_name)
+
+        # Remove unused splits
+        for split in list(dataset.keys()):
+            if split not in dataset_config["test_splits"] + [new_train_split_name, new_dev_split_name]:
+                del dataset[split]
 
         logger.info(f"Preprocessing dataset {dataset_config['dataset_name']}")
         dataset_processed = prepare_dataset(
             dataset=dataset,
             dataset_name=dataset_config["dataset_name"],
-            length_column_name=dataset_config["length_column_name"],
-            text_column_name=dataset_config["text_column_name"],
-            audio_column_name=dataset_config["audio_column_name"],
+            length_column_name=dataset_config.get("length_column_name"),
+            text_column_name=dataset_config.get("text_column_name"),
+            audio_column_name=dataset_config.get("audio_column_name"),
             preprocessing_num_workers=num_proc,
             writer_batch_size=writer_batch_size,
             train_split=new_train_split_name,
-            fix_apostrophes=dataset_config["fix_apostrophes"],
-            remove_train_unks=dataset_config["remove_train_unks"],
-            unk_token=dataset_config["unk_token"],
+            text_transformations=dataset_config.get("text_transformations"),
             sampling_rate=sampling_rate,
             max_input_len=max_input_len,
             min_input_len=min_input_len,
-            do_lower_case=dataset_config["do_lower_case"],
-            remove_punctuation=dataset_config["remove_punctuation"],
+            split_long_segments_to_chunks=split_long_segments_to_chunks,
+            reshuffle_at_start=dataset_config.get("reshuffle_at_start", False),
         )
-        dataset_renamed = dataset_processed.rename_columns(
-            {
-                dataset_config["length_column_name"]: global_len_column,
-                dataset_config["text_column_name"]: global_text_column,
-                dataset_config["audio_column_name"]: global_audio_column,
-            }
-        )
-        dataset_local = dataset_renamed.remove_columns(
+
+        for column, global_column in [
+            ("length_column_name", global_len_column),
+            ("text_column_name", global_text_column),
+            ("audio_column_name", global_audio_column),
+        ]:
+            if dataset_config.get(column) is not None and dataset_config.get(column) != global_column:
+                dataset_processed = dataset_processed.rename_column(dataset_config.get(column), global_column)
+
+        dataset_local = dataset_processed.remove_columns(
             list(
                 set()
-                .union(*dataset_renamed.column_names.values())
+                .union(*dataset_processed.column_names.values())
                 .difference([global_len_column, global_text_column, global_audio_column])
             )
         )
@@ -406,6 +490,41 @@ def load_multiple_datasets(
             new_dev_split_name,
         )
     return dataset_merged
+
+
+def get_eval_split(
+    dataset: DatasetDict,
+    train_split_name: str,
+    validation_split_name: str,
+    data_slice_str: str,
+    cut_validation_from_train: bool,
+    seed: Optional[int],
+) -> Dataset:
+    if cut_validation_from_train:
+        if validation_split_name in dataset:
+            raise ValueError(
+                "Cannot use cut_validation_from_train and validation_split that exist in the dataset at the same time."
+            )
+        if data_slice_str is not None:
+            train_split = dataset[train_split_name]
+            data_slice = extract_num_samples(train_split, data_slice_str)
+            new_splits = train_split.train_test_split(test_size=data_slice, shuffle=True, seed=seed)
+            dataset[train_split_name] = new_splits["train"]
+            dataset[validation_split_name + data_slice_str] = new_splits["test"]
+            return new_splits["test"]
+        else:
+            raise ValueError("Cannot use cut_validation_from_train without specifying data_slice.")
+    elif train_split_name == validation_split_name:
+        raise ValueError("Cannot use the same split for training and validation.")
+    else:
+        validation_split = dataset[validation_split_name]
+        if data_slice_str is not None:
+            data_slice = extract_num_samples(validation_split, data_slice_str)
+            training_eval_dataset = validation_split.shuffle(seed=seed).select(range(data_slice))
+            dataset[validation_split_name + data_slice_str] = training_eval_dataset
+            return training_eval_dataset
+        else:
+            return validation_split
 
 
 def get_dataset(
@@ -422,17 +541,15 @@ def get_dataset(
     audio_column: str,
     train_split: str,
     validation_split: str,
-    unk_token: str,
-    fix_apostrophes: bool,
-    remove_train_unks: bool,
-    do_lower_case: bool,
-    remove_punctuation: bool,
-    remove_commas_stops: bool = False,
-    skip_audio_processing: bool = False,
+    text_transformations: Optional[List[str]],
+    split_long_segments_to_chunks: bool,
+    validation_slice_str: str,
+    cut_validation_from_train: bool,
+    seed: Optional[int],
+    reshuffle_at_start: bool,
+    skip_audio_processing: Optional[bool] = False,
     data_dir: Optional[str] = None,
-    remove_listed_chars: Optional[str] = None,
-    lcrm: bool = False,
-) -> DatasetDict:
+) -> Tuple[DatasetDict, Dataset]:
     """Loads single or multiple datasets, preprocess, and merge them."""
     if datasets_creation_config_path is not None:
         dataset = load_multiple_datasets(
@@ -447,22 +564,31 @@ def get_dataset(
             global_audio_column=audio_column,
             global_train_split=train_split,
             global_validation_split=validation_split,
+            split_long_segments_to_chunks=split_long_segments_to_chunks,
         )
     else:
-        if dataset_config is not None:
-            dataset = load_dataset(
-                dataset_name, dataset_config, data_dir=data_dir, keep_in_memory=False, num_proc=preprocessing_num_workers
-            )
-        elif data_dir is not None:
+        with DistributedContext() as context:
+            context.wait_before()
+            if dataset_config is not None:
+                dataset = load_dataset(
+                    dataset_name,
+                    dataset_config,
+                    data_dir=data_dir,
+                    keep_in_memory=False,
+                    num_proc=preprocessing_num_workers,
+                    writer_batch_size=writer_batch_size,
+                )
+            elif data_dir is not None:
 
-            # loads the dataset located at data_dir with the specific dataset_name builder in mind
-            dataset = load_dataset(
-                dataset_name,
-                data_dir=data_dir,
-                keep_in_memory=False, num_proc=preprocessing_num_workers
-            )
-        else:
-            dataset = load_from_disk(dataset_name, keep_in_memory=False)
+                # loads the dataset located at data_dir with the specific dataset_name builder in mind
+                dataset = load_dataset(
+                    dataset_name,
+                    data_dir=data_dir,
+                    keep_in_memory=False, num_proc=preprocessing_num_workers
+                )
+            else:
+                dataset = load_from_disk(dataset_name, keep_in_memory=False)
+            context.wait_after()
 
         # 3. Preprocess dataset
         dataset = prepare_dataset(
@@ -474,17 +600,48 @@ def get_dataset(
             preprocessing_num_workers=preprocessing_num_workers,
             writer_batch_size=writer_batch_size,
             train_split=train_split,
-            fix_apostrophes=fix_apostrophes,
-            remove_train_unks=remove_train_unks,
-            unk_token=unk_token,
             sampling_rate=sampling_rate,
             max_input_len=max_input_len,
             min_input_len=min_input_len,
-            do_lower_case=do_lower_case,
-            remove_punctuation=remove_punctuation,
-            remove_commas_stops=remove_commas_stops,
+            text_transformations=text_transformations,
+            split_long_segments_to_chunks=split_long_segments_to_chunks,
+            reshuffle_at_start=reshuffle_at_start,
             skip_audio_processing=skip_audio_processing,
-            remove_listed_chars=remove_listed_chars,
-            lcrm=lcrm,
         )
-    return dataset
+
+
+    if skip_audio_processing:
+        return dataset, None
+
+    # Filter samples shorter than 0.1s - {MIN_INPUT_LEN},
+    # due to the conv subsampling and mel fbank extraction in model encoder
+    dataset_splits = list(dataset.keys())
+    dataset_splits.remove(train_split)
+    for split in dataset_splits:
+        dataset[split] = distributed_process(
+            dataset[split],
+            process_by="filter",
+            function=filter_sequences_in_range_batched,
+            batched=True,
+            input_columns=[len_column],
+            num_proc=preprocessing_num_workers,
+            writer_batch_size=writer_batch_size,
+            fn_kwargs={"max_input_len": np.finfo(np.float32).max, "min_input_len": MIN_INPUT_LEN},
+            desc="Filter samples that the model is not able to process due to the conv subsampling.",
+        )
+    train_eval_split = get_eval_split(
+        dataset, train_split, validation_split, validation_slice_str, cut_validation_from_train, seed
+    )
+    return dataset, train_eval_split
+
+
+def extract_num_samples(dataset: Dataset, data_slice: str) -> int:
+    if data_slice.isnumeric():
+        data_slice = int(data_slice)
+    else:
+        data_slice = data_slice.replace("%", "")
+        if data_slice.isnumeric():
+            data_slice = int(float(data_slice) * len(dataset) / 100)
+        else:
+            raise ValueError(f"Invalid slice value: {data_slice}, must be number or percentage")
+    return data_slice

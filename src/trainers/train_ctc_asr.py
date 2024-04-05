@@ -7,7 +7,7 @@ from transformers.utils import logging
 from utilities.callbacks import init_callbacks
 from utilities.collators import SpeechCollatorWithPadding
 from utilities.data_utils import get_dataset
-from utilities.eval_utils import compute_metrics_ctc
+from utilities.eval_utils import compute_metrics_ctc, get_most_likely_tokens
 from utilities.general_utils import do_evaluate
 from utilities.model_utils import instantiate_ctc_model
 from utilities.training_arguments import (
@@ -25,7 +25,7 @@ if __name__ == "__main__":
     model_args, data_args, training_args, gen_args = parser.parse_args_into_dataclasses()
 
     # 1. Collect, preprocess dataset and extract evaluation dataset
-    dataset = get_dataset(
+    dataset, training_eval_dataset = get_dataset(
         datasets_creation_config_path=data_args.datasets_creation_config,
         dataset_name=data_args.dataset_name,
         dataset_config=data_args.dataset_config,
@@ -39,19 +39,13 @@ if __name__ == "__main__":
         audio_column=data_args.audio_column_name,
         train_split=data_args.train_split,
         validation_split=data_args.validation_split,
-        unk_token=data_args.unk_token,
-        fix_apostrophes=data_args.fix_apostrophes,
-        remove_train_unks=data_args.remove_train_unks,
-        do_lower_case=data_args.do_lower_case,
-        remove_punctuation=data_args.remove_punctuation,
+        text_transformations=data_args.text_transformations,
+        split_long_segments_to_chunks=data_args.split_long_segments_to_chunks,
+        validation_slice_str=data_args.validation_slice,
+        cut_validation_from_train=data_args.cut_validation_from_train,
+        seed=data_args.validation_slice_seed,
+        reshuffle_at_start=data_args.reshuffle_at_start,
     )
-
-    if data_args.validation_slice:
-        training_eval_dataset = dataset[data_args.validation_split].shuffle().select(range(data_args.validation_slice))
-        # Ensure that transformations are also attached to the sliced validation dataset
-        dataset[data_args.validation_split + str(data_args.validation_slice)] = training_eval_dataset
-    else:
-        training_eval_dataset = dataset[data_args.validation_split]
 
     logger.info(f"Dataset processed successfully.{dataset}")
 
@@ -78,6 +72,7 @@ if __name__ == "__main__":
         audio_path=data_args.audio_column_name,
         text_path=data_args.text_column_name,
         model_input_name=model.main_input_name,
+        mask_unks=training_args.mask_unks,
     )
 
     trainer = Trainer(
@@ -87,6 +82,7 @@ if __name__ == "__main__":
         train_dataset=dataset[data_args.train_split],
         eval_dataset=training_eval_dataset,
         data_collator=data_collator,
+        preprocess_logits_for_metrics=get_most_likely_tokens,
         compute_metrics=lambda pred: compute_metrics_ctc(tokenizer, pred, gen_args.wandb_predictions_to_save),
     )
 
@@ -104,5 +100,4 @@ if __name__ == "__main__":
             gen_args=None,
             data_args=data_args,
             training_args=training_args,
-            eos_token_id=tokenizer.eos_token_id,
         )

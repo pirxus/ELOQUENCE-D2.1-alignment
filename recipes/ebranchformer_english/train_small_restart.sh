@@ -5,9 +5,9 @@
 #SBATCH --gpus 4
 #SBATCH --nodes 1
 #SBATCH --time 2-00:00:00
-#SBATCH --output=/mnt/proj1/open-28-58/lakoc/huggingface_asr/outputs/ebranchformer_english_small_restart.out
+#SBATCH --output=/mnt/proj1/open-28-58/lakoc/huggingface_asr/outputs/ebranchformer_english_small_restart3.out
 
-EXPERIMENT="ebranchformer_english_small_restart"
+EXPERIMENT="ebranchformer_english_small_restart3"
 PROJECT="regularizations_english_corpus"
 WORK_DIR="/mnt/proj1/open-28-58/lakoc/huggingface_asr"
 ENV_DIR="/mnt/proj1/open-28-58/lakoc/LoCo-ASR"
@@ -28,9 +28,9 @@ cd $WORK_DIR
 
 args=(
   # General training arguments
-  --output_dir=$EXPERIMENT_PATH
+  --output_dir="/mnt/proj1/open-28-58/lakoc/huggingface_asr/experiments/ebranchformer_english_small_v3"
   --per_device_train_batch_size="64"
-  --per_device_eval_batch_size="64"
+  --per_device_eval_batch_size="24"
   --dataloader_num_workers="24"
   --num_train_epochs="50"
   --group_by_length="True"
@@ -93,6 +93,7 @@ args=(
 
   # Restart related arguments
   --restart_from="/mnt/proj1/open-28-58/lakoc/huggingface_asr/experiments/ebranchformer_english_small_v3/checkpoint-357500"
+  --ignore_data_skip
 )
 
 torchrun --standalone --nnodes=1 --nproc-per-node=4 src/trainers/train_enc_dec_asr.py "${args[@]}"

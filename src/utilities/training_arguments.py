@@ -48,6 +48,11 @@ class ModelArguments:
     whisper_language: Optional[str] = field(default=None, metadata={"help": "Language of the model."})
     whisper_task: Optional[str] = field(default=None, metadata={"help": "Task of the model."})
 
+    """Token mixing specific arguments."""
+    finetune_mixing_mechanism: Optional[str] = field(
+        default=None, metadata={"help": "Type of mixing mechanism to use for finetuning."}
+    )
+
 
 @dataclass
 class GeneralTrainingArguments(Seq2SeqTrainingArguments):
@@ -79,6 +84,18 @@ class GeneralTrainingArguments(Seq2SeqTrainingArguments):
         default=False, metadata={"help": "Whether to use joint decoding during training."}
     )
     freeze_encoder_epochs: Optional[int] = field(default=None, metadata={"help": "Freezes the encoder for the specified number of epochs."})
+    qformer_eval_callback: Optional[bool] = field(default=False, metadata={"help": "Makes sure the encoder and decoder for a qformer model are put into eval mode for training."})
+    mask_unks: Optional[bool] = field(
+        default=False, metadata={"help": "Whether to mask unknown tokens for cross entropy."}
+    )
+
+
+@dataclass
+class PretrainingArguments(GeneralTrainingArguments):
+    _argument_group_name = "Pretraining related arguments"
+    gumbel_temperature_decay: Optional[float] = field(default=0.999995, metadata={"help": "Gumbel temperature decay."})
+    min_gumbel_temperature: Optional[float] = field(default=0.5, metadata={"help": "Minimum Gumbel temperature."})
+    max_gumbel_temperature: Optional[float] = field(default=2.0, metadata={"help": "Maximum Gumbel temperature."})
 
 
 @dataclass
@@ -97,8 +114,8 @@ class GenerationArguments:
     """Joint decoding related arguments."""
     decoding_ctc_weight: Optional[float] = field(default=0.0, metadata={"help": "CTC weight to bias hypothesis."})
     ctc_margin: Optional[float] = field(default=0, metadata={"help": "Margin to stop generation."})
-    external_lm: Optional[str] = field(default=None, metadata={"help": "Path to external LM."})
-    external_lm_weight: Optional[float] = field(default=0.0, metadata={"help": "Weight of external LM."})
+    lm_model: Optional[str] = field(default=None, metadata={"help": "Path to external LM."})
+    lm_weight: Optional[float] = field(default=0.0, metadata={"help": "Weight of external LM."})
     """Generation logging related arguments."""
     wandb_predictions_to_save: Optional[int] = field(
         default=100, metadata={"help": "Number of predictions to save to wandb."}
@@ -106,6 +123,12 @@ class GenerationArguments:
     num_predictions_to_return: Optional[int] = field(default=1, metadata={"help": "Number of predictions to return."})
     nbest_path_to_save: Optional[str] = field(default="nbests", metadata={"help": "Path to save nbest hypotheses."})
     save_output_states: Optional[bool] = field(default=False, metadata={"help": "Whether to save output states."})
+    post_process_predicitons: Optional[bool] = field(
+        default=False, metadata={"help": "Whether to post process predictions."}
+    )
+    apply_eos_space_trick: Optional[bool] = field(default=False, metadata={"help": "Whether to apply eos space trick."})
+    eos_space_trick_weight: Optional[float] = field(default=0.0, metadata={"help": "Weight of eos space trick."})
+    space_token_id: Optional[int] = field(default=-1, metadata={"help": "Space token id."})
 
 
 @dataclass
@@ -147,26 +170,9 @@ class DataTrainingArguments:
         default=False, metadata={"help": "Whether to skip the audio pre-preocessing stage when preparing the dataset."}
     )
     writer_batch_size: Optional[int] = field(default=500, metadata={"help": "Batch size to use for writing to disk."})
-    remove_train_unks: Optional[bool] = field(
-        default=False, metadata={"help": "Whether to remove UNKs from training data."}
+    text_transformations: Optional[List[str]] = field(
+        default=None, metadata={"help": "List of transformations to apply to the text. "}
     )
-    fix_apostrophes: Optional[bool] = field(
-        default=False, metadata={"help": "Whether to remove trailing spaces from labels."}
-    )
-    do_lower_case: Optional[bool] = field(default=False, metadata={"help": "Whether to lowercase labels."})
-    remove_punctuation: Optional[bool] = field(
-        default=False, metadata={"help": "Whether to remove punctuation from labels."}
-    )
-    lcrm: Optional[bool] = field(
-        default=False, metadata={"help": "Whether to remove punctuation (not apostrophes) from labels."}
-    )
-    remove_listed_chars: Optional[str] = field(
-        default=None, metadata={"help": "Removes characters specified by the string from labels."}
-    )
-    remove_commas_stops: Optional[bool] = field(
-        default=False, metadata={"help": "Whether to remove commas and full-stops from labels."}
-    )
-    unk_token: Optional[str] = field(default="<unk>", metadata={"help": "UNK token"})
 
     """Arguments defining structure of the dataset"""
     audio_column_name: Optional[str] = field(
@@ -180,8 +186,20 @@ class DataTrainingArguments:
     train_split: Optional[str] = field(default="train", metadata={"help": "Training split to be used."})
     validation_split: Optional[str] = field(default="validation", metadata={"help": "Validation split to be used."})
     test_splits: Optional[List[str]] = field(default=None, metadata={"help": "Splits to use for evaluation."})
-    validation_slice: Optional[int] = field(default=None, metadata={"help": "Part of the validation split to be used."})
+    validation_slice: Optional[str] = field(default=None, metadata={"help": "Part of the validation split to be used."})
     sampling_rate: Optional[int] = field(default=16_000, metadata={"help": "Sampling rate for the model."})
+    split_long_segments_to_chunks: Optional[bool] = field(
+        default=False, metadata={"help": "Whether to split long segments to chunks."}
+    )
+    cut_validation_from_train: Optional[bool] = field(
+        default=False, metadata={"help": "Whether to cut validation split from train split."}
+    )
+    validation_slice_seed: Optional[int] = field(
+        default=None, metadata={"help": "Seed to use for splitting validation slice."}
+    )
+    reshuffle_at_start: Optional[bool] = field(
+        default=False, metadata={"help": "Whether to reshuffle the dataset at the start of preprocessing."}
+    )
 
 
 @dataclass
@@ -223,6 +241,7 @@ class TokenizerTrainingArguments:
     mask_token: Optional[str] = field(default="<mask>", metadata={"help": "MASK token"})
     bos_token: Optional[str] = field(default="<s>", metadata={"help": "BOS token"})
     eos_token: Optional[str] = field(default="</s>", metadata={"help": "EOS token"})
+    unk_token: Optional[str] = field(default="<unk>", metadata={"help": "UNK token"})
 
 @dataclass
 class QFormerArguments:
@@ -235,6 +254,9 @@ class QFormerArguments:
     qf_hidden_size: Optional[int] = field(default=768, metadata={"help": "Qformer hidden dimension."})
     qf_n_attn_heads: Optional[int] = field(default=12, metadata={"help": "Number of qformer heads."})
     qf_intermediate_size: Optional[int] = field(default=3072, metadata={"help": "Qformer intermediate layer dimension."})
+    qf_mm_pooling: Optional[str] = field(default=None, metadata={"help": "Modality-matching loss pooling method."}
+    )
+    qf_mm_loss_weight: Optional[float] = field(default=0.0, metadata={"help": "Modality-matching loss weight."})
     qf_config_overrides: Optional[str] = field(
         default=None,
         metadata={

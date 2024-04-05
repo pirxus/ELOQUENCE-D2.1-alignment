@@ -15,11 +15,8 @@ from transformers import (
 from transformers.generation.utils import BeamSearchOutput
 from transformers.utils import logging
 
-from utilities.generation_utils import (
-    check_and_activate_joint_decoding,
-    save_nbests,
-    save_predictions,
-)
+import utilities.data_utils as data_utils
+from utilities.generation_utils import save_nbests, save_predictions
 from utilities.training_arguments import (
     DataTrainingArguments,
     GeneralTrainingArguments,
@@ -56,6 +53,22 @@ class FunctionReturnWrapper:
                 raise ValueError("Invalid return configuration. Use a list of integers/strings.")
         else:
             raise ValueError("Invalid return configuration. Use None or a list of integers/strings.")
+
+
+def function_aggregator(fun_list):
+    def wrapper(arg):
+        for fun in reversed(fun_list):
+            arg = fun(arg)
+        return arg
+
+    return wrapper
+
+
+def text_transform_partial(f):
+    def wrapped(*args2, **kwargs2):
+        return f(*args2, **kwargs2, label_column="aux")["aux"]
+
+    return wrapped
 
 
 def resolve_attribute_from_nested_class(obj: Any, attr_spec: str) -> Any:
@@ -116,12 +129,10 @@ def do_evaluate(
     gen_args: Optional[GenerationArguments],
     training_args: GeneralTrainingArguments,
     data_args: DataTrainingArguments,
-    eos_token_id: int,
 ):
     if data_args.test_splits is None:
         return
     if isinstance(trainer, Seq2SeqTrainer) and isinstance(model, SpeechEncoderDecoderModel):
-        check_and_activate_joint_decoding(gen_args, model, tokenizer, eos_token_id)
         trainer.args.per_device_eval_batch_size = math.ceil(
             trainer.args.per_device_eval_batch_size / gen_args.eval_beam_factor
         )
@@ -137,10 +148,24 @@ def do_evaluate(
                 dataset[split],
             )
         logger.info(f"Metrics for {split} split: {predictions.metrics}")
+
+        if gen_args.post_process_predicitons and data_args.text_transformations is not None:
+            callable_transform = function_aggregator(
+                [
+                    text_transform_partial(
+                        getattr(data_utils, transform_name, lambda x, label_column: {label_column: x})
+                    )
+                    for transform_name in data_args.text_transformations
+                ]
+            )
+        else:
+            callable_transform = None
+
         save_predictions(
             tokenizer,
             predictions,
             f"{training_args.output_dir}/" f'predictions_{split}_wer{100 * predictions.metrics["test_wer"]:.2f}.csv',
+            callable_transform,
         )
 
 
@@ -152,11 +177,9 @@ def do_generate(
     gen_args: GenerationArguments,
     data_args: DataTrainingArguments,
     gen_config: GenerationConfig,
-    eos_token_id: int,
 ):
     if data_args.test_splits is None:
         return
-    check_and_activate_joint_decoding(gen_args, model, tokenizer, eos_token_id)
 
     gen_config.num_return_sequences = gen_args.num_predictions_to_return
     gen_config.return_dict_in_generate = True

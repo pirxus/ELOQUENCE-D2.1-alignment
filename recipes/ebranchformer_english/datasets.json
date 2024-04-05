@@ -6,7 +6,7 @@
     "train_splits": [
       "train"
     ],
-    "dev_splits": [
+    "validation_splits": [
       "dev_dt_20",
       "dev_dt_05"
     ],
@@ -16,11 +16,11 @@
     "text_column_name": "labels",
     "audio_column_name": "audio",
     "length_column_name": "input_len",
-    "fix_apostrophes": true,
-    "remove_train_unks": false,
-    "do_lower_case": true,
-    "remove_punctuation": true,
-    "unk_token": "<unk>",
+    "text_transformations": [
+      "whisper_normalize_english",
+      "clean_special_tokens_english_train",
+      "transforms_unfinished_words_to_unks_train"
+    ],
     "additional_args": {
       "data_dir": "/mnt/matylda5/ipoloka/projects/huggingface_asr/metadata_dirs/wsj",
       "splits": []
@@ -33,20 +33,20 @@
     "train_splits": [
       "train"
     ],
-    "dev_splits": [
-      "dev"
+    "validation_splits": [
+      "test"
     ],
     "test_splits": [
-      "test"
+      "dev"
     ],
     "text_column_name": "labels",
     "audio_column_name": "audio",
     "length_column_name": "input_len",
-    "fix_apostrophes": true,
-    "remove_train_unks": false,
-    "do_lower_case": true,
-    "remove_punctuation": true,
-    "unk_token": "<unk>",
+    "text_transformations": [
+      "whisper_normalize_english",
+      "clean_special_tokens_english_train",
+      "transforms_unfinished_words_to_unks_train"
+    ],
     "additional_args": {
       "data_dir": "/mnt/matylda5/ipoloka/projects/huggingface_asr/metadata_dirs/fisher_swbd",
       "splits": []
@@ -59,7 +59,7 @@
     "train_splits": [
       "train"
     ],
-    "dev_splits": [
+    "validation_splits": [
       "validation"
     ],
     "test_splits": [
@@ -68,11 +68,11 @@
     "text_column_name": "normalized_text",
     "audio_column_name": "audio",
     "length_column_name": "input_len",
-    "fix_apostrophes": true,
-    "remove_train_unks": false,
-    "do_lower_case": true,
-    "remove_punctuation": true,
-    "unk_token": "<unk>",
+    "text_transformations": [
+      "whisper_normalize_english",
+      "clean_special_tokens_english_train",
+      "transforms_unfinished_words_to_unks_train"
+    ],
     "additional_args": {
       "name": "en"
     }
@@ -84,7 +84,7 @@
     "train_splits": [
       "train"
     ],
-    "dev_splits": [
+    "validation_splits": [
       "validation"
     ],
     "test_splits": [
@@ -93,11 +93,11 @@
     "text_column_name": "text",
     "audio_column_name": "audio",
     "length_column_name": "input_len",
-    "fix_apostrophes": true,
-    "remove_train_unks": false,
-    "do_lower_case": true,
-    "remove_punctuation": true,
-    "unk_token": "<unk>",
+    "text_transformations": [
+      "whisper_normalize_english",
+      "clean_special_tokens_english_train",
+      "transforms_unfinished_words_to_unks_train"
+    ],
     "additional_args": {
       "name": "release3"
     }
@@ -111,7 +111,7 @@
       "train.clean.360",
       "train.other.500"
     ],
-    "dev_splits": [
+    "validation_splits": [
       "validation.clean",
       "validation.other"
     ],
@@ -122,11 +122,11 @@
     "text_column_name": "text",
     "audio_column_name": "audio",
     "length_column_name": "input_len",
-    "fix_apostrophes": true,
-    "remove_train_unks": false,
-    "do_lower_case": true,
-    "remove_punctuation": true,
-    "unk_token": "<unk>",
+    "text_transformations": [
+      "whisper_normalize_english",
+      "clean_special_tokens_english_train",
+      "transforms_unfinished_words_to_unks_train"
+    ],
     "additional_args": {
       "name": "all"
     }
@@ -138,7 +138,7 @@
     "train_splits": [
       "train"
     ],
-    "dev_splits": [
+    "validation_splits": [
       "validation"
     ],
     "test_splits": [
@@ -147,11 +147,12 @@
     "text_column_name": "sentence",
     "audio_column_name": "audio",
     "length_column_name": "input_len",
-    "fix_apostrophes": true,
-    "remove_train_unks": false,
-    "do_lower_case": true,
-    "remove_punctuation": true,
-    "unk_token": "<unk>",
+    "text_transformations": [
+      "whisper_normalize_english",
+      "clean_special_tokens_english_train",
+      "transforms_unfinished_words_to_unks_train"
+    ],
+    "reshuffle_at_start": true,
     "additional_args": {
       "name": "en"
     }
@@ -162,7 +163,7 @@
     "load_from_disk": false,
     "train_splits": [
     ],
-    "dev_splits": [
+    "validation_splits": [
       "validation"
     ],
     "test_splits": [
@@ -171,11 +172,11 @@
     "text_column_name": "transcription",
     "audio_column_name": "audio",
     "length_column_name": "input_len",
-    "fix_apostrophes": true,
-    "remove_train_unks": false,
-    "do_lower_case": true,
-    "remove_punctuation": true,
-    "unk_token": "<unk>",
+    "text_transformations": [
+      "whisper_normalize_english",
+      "clean_special_tokens_english_train",
+      "transforms_unfinished_words_to_unks_train"
+    ],
     "additional_args": {
       "name": "en_us"
     }

@@ -5,9 +5,9 @@
 #SBATCH --gpus 8
 #SBATCH --nodes 1
 #SBATCH --time 2-00:00:00
-#SBATCH --output=/mnt/proj1/open-28-58/lakoc/huggingface_asr/outputs/ebranchformer_english_medium2.out
+#SBATCH --output=/mnt/proj1/open-28-58/lakoc/huggingface_asr/outputs/ebranchformer_english_medium_base.out
 
-EXPERIMENT="ebranchformer_english_medium2"
+EXPERIMENT="ebranchformer_english_medium_base"
 PROJECT="regularizations_english_corpus"
 WORK_DIR="/mnt/proj1/open-28-58/lakoc/huggingface_asr"
 ENV_DIR="/mnt/proj1/open-28-58/lakoc/LoCo-ASR"
@@ -30,9 +30,9 @@ args=(
   # General training arguments
   --output_dir=$EXPERIMENT_PATH
   --per_device_train_batch_size="32"
-  --per_device_eval_batch_size="16"
+  --per_device_eval_batch_size="8"
   --dataloader_num_workers="24"
-  --num_train_epochs="100"
+  --num_train_epochs="50"
   --group_by_length="True"
   --bf16
   --do_train
@@ -42,11 +42,11 @@ args=(
 
   # Optimizer related arguments
   --optim="adamw_torch"
-  --learning_rate="5e-3"
-  --warmup_steps="30000"
+  --learning_rate="2e-3"
+  --warmup_steps="20000"
   --early_stopping_patience="5"
   --weight_decay="1e-6"
-  --max_grad_norm="1.0"
+  --max_grad_norm="5.0"
   --lsm_factor="0.1"
   --gradient_accumulation_steps="1"
 
@@ -85,11 +85,10 @@ args=(
   --expect_2d_input
 
   # Generation related arguments
-  --num_beams="4"
+  --num_beams="1"
   --max_length="512"
   --predict_with_generate
   --decoding_ctc_weight="0.3"
-  --eval_beam_factor="10"
 )
 
 torchrun --standalone --nnodes=1 --nproc-per-node=8 src/trainers/train_enc_dec_asr.py "${args[@]}"

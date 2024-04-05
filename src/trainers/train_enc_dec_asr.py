@@ -3,20 +3,20 @@ import sys
 
 from transformers import (
     AutoFeatureExtractor,
+    AutoModelForCausalLM,
     AutoTokenizer,
-    GenerationConfig,
     HfArgumentParser,
     Seq2SeqTrainer,
     WhisperForConditionalGeneration,
 )
 from transformers.utils import logging
 
+from decoding.config import GenerationConfigCustom
 from utilities.callbacks import init_callbacks
 from utilities.collators import SpeechCollatorWithPadding
 from utilities.data_utils import get_dataset
 from utilities.eval_utils import compute_metrics
 from utilities.general_utils import do_evaluate, do_generate
-from utilities.generation_utils import activate_joint_decoding
 from utilities.model_utils import instantiate_aed_model
 from utilities.training_arguments import (
     DataTrainingArguments,
@@ -34,7 +34,7 @@ if __name__ == "__main__":
     model_args, data_args, training_args, gen_args = parser.parse_args_into_dataclasses()
 
     # 1. Collect, preprocess dataset and extract evaluation dataset
-    dataset = get_dataset(
+    dataset, training_eval_dataset = get_dataset(
         datasets_creation_config_path=data_args.datasets_creation_config,
         dataset_name=data_args.dataset_name,
         dataset_config=data_args.dataset_config,
@@ -49,22 +49,13 @@ if __name__ == "__main__":
         audio_column=data_args.audio_column_name,
         train_split=data_args.train_split,
         validation_split=data_args.validation_split,
-        unk_token=data_args.unk_token,
-        fix_apostrophes=data_args.fix_apostrophes,
-        remove_train_unks=data_args.remove_train_unks,
-        do_lower_case=data_args.do_lower_case,
-        remove_punctuation=data_args.remove_punctuation,
-        remove_commas_stops=data_args.remove_commas_stops,
-        remove_listed_chars=data_args.remove_listed_chars,
-        lcrm=data_args.lcrm,
+        text_transformations=data_args.text_transformations,
+        split_long_segments_to_chunks=data_args.split_long_segments_to_chunks,
+        validation_slice_str=data_args.validation_slice,
+        cut_validation_from_train=data_args.cut_validation_from_train,
+        seed=data_args.validation_slice_seed,
+        reshuffle_at_start=data_args.reshuffle_at_start,
     )
-
-    if data_args.validation_slice:
-        training_eval_dataset = dataset[data_args.validation_split].shuffle().select(range(data_args.validation_slice))
-        # Ensure that transformations are also attached to the sliced validation dataset
-        dataset[data_args.validation_split + str(data_args.validation_slice)] = training_eval_dataset
-    else:
-        training_eval_dataset = dataset[data_args.validation_split]
 
     logger.info(f"Dataset processed successfully.{dataset}")
 
@@ -80,7 +71,7 @@ if __name__ == "__main__":
     model = instantiate_aed_model(model_args, tokenizer, feature_extractor)
 
     # 4. Update generation config
-    gen_config = GenerationConfig(
+    gen_config = GenerationConfigCustom(
         bos_token_id=tokenizer.bos_token_id,
         pad_token_id=tokenizer.pad_token_id,
         decoder_start_token_id=tokenizer.bos_token_id,
@@ -89,17 +80,22 @@ if __name__ == "__main__":
         eos_token_id=tokenizer.eos_token_id,
         max_length=gen_args.max_length,
         num_beams=gen_args.num_beams,
+        ctc_weight=gen_args.decoding_ctc_weight,
+        ctc_margin=gen_args.ctc_margin,
+        lm_weight=gen_args.lm_weight,
+        lm_model=AutoModelForCausalLM.from_pretrained(gen_args.lm_model) if gen_args.lm_model else None,
+        space_token_id=gen_args.space_token_id,
+        apply_eos_space_trick=gen_args.apply_eos_space_trick,
+        eos_space_trick_weight=gen_args.eos_space_trick_weight,
     )
-    logger.info(f"Model updating generation config:\n {str(gen_config)}")
+    logger.info(f"Model updating generation config:\n")
     training_args.generation_max_length = gen_args.max_length
     training_args.generation_num_beams = gen_args.num_beams
-    model.generation_config = gen_config
 
-    if isinstance(model, WhisperForConditionalGeneration) and model_args.whisper_task and model_args.whisper_language:
-        model.config.suppress_tokens = []
-        model.config.forced_decoder_ids = tokenizer.get_decoder_prompt_ids(
-            language=model_args.whisper_language, task=model_args.whisper_task
-        )
+    if isinstance(model, WhisperForConditionalGeneration):
+        model.generation_config.num_beams = gen_args.num_beams
+    else:
+        model.generation_config = gen_config
 
     # 5. Initialize callbacks
     callbacks = init_callbacks(data_args, training_args, dataset, feature_extractor)
@@ -113,6 +109,7 @@ if __name__ == "__main__":
         audio_path=data_args.audio_column_name,
         text_path=data_args.text_column_name,
         model_input_name=model.main_input_name,
+        mask_unks=training_args.mask_unks,
     )
 
     # 7. Initialize trainer
@@ -129,16 +126,6 @@ if __name__ == "__main__":
 
     # 8. Train model
     if training_args.do_train:
-        if gen_args.decoding_ctc_weight > 0 and training_args.joint_decoding_during_training:
-            activate_joint_decoding(
-                model=model,
-                ctc_weight=gen_args.decoding_ctc_weight,
-                ctc_margin=gen_args.ctc_margin,
-                num_tokens=len(tokenizer),
-                eos_token=tokenizer.eos_token_id,
-                external_lm=None,
-                external_lm_weight=0,
-            )
         trainer.train(resume_from_checkpoint=training_args.restart_from or None)
 
     # 9. Evaluation
@@ -151,7 +138,6 @@ if __name__ == "__main__":
             gen_args=gen_args,
             training_args=training_args,
             data_args=data_args,
-            eos_token_id=tokenizer.eos_token_id,
         )
     # 10. N-best generation
     if training_args.do_generate:
@@ -162,6 +148,5 @@ if __name__ == "__main__":
             tokenizer=tokenizer,
             gen_args=gen_args,
             data_args=data_args,
-            eos_token_id=tokenizer.eos_token_id,
             gen_config=gen_config,
         )
