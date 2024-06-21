@@ -1,8 +1,9 @@
-"""Main training script for training of attention based encoder decoder ASR models."""
+"""Main training script for the retraining of the T5 decoder"""
 import sys
 
 from transformers import (
     AutoFeatureExtractor,
+    AutoModelForSeq2SeqLM,
     AutoTokenizer,
     DataCollatorForSeq2Seq,
     GenerationConfig,
@@ -10,13 +11,16 @@ from transformers import (
     MarianConfig,
     MarianMTModel,
     Seq2SeqTrainer,
-    EarlyStoppingCallback
+    EarlyStoppingCallback,
+    T5ForConditionalGeneration,
+    T5Config,
 )
 
+from models.t5_plus_marian import T5PlusMarian
 from transformers.utils import logging
 
 from utilities.callbacks import init_callbacks
-from utilities.collators import SpeechCollatorWithPadding
+from utilities.collators import SpeechCollatorWithPadding, MultiTokMTCollatorWithPadding
 from utilities.data_utils import get_dataset
 from utilities.eval_utils import compute_metrics_translation
 from utilities.model_utils import average_checkpoints_torch
@@ -59,6 +63,7 @@ if __name__ == "__main__":
         seed=data_args.validation_slice_seed,
         reshuffle_at_start=data_args.reshuffle_at_start,
         skip_audio_processing=True,
+        load_pure_dataset_only=data_args.load_pure_dataset_only,
     )
 
     logger.info(f"Dataset processed successfully.{dataset}")
@@ -68,27 +73,49 @@ if __name__ == "__main__":
         sys.exit(0)
 
     # 2. Create feature extractor and tokenizer
-    #tokenizer_source = AutoTokenizer.from_pretrained(training_args.tokenizer_name)
+    tokenizer_source = AutoTokenizer.from_pretrained(training_args.tokenizer_name)
     #tokenizer_source = AutoTokenizer.from_pretrained('pirxus/how2_en_unigram8000_tc')
     #tokenizer_target = AutoTokenizer.from_pretrained('pirxus/how2_pt_unigram8000_tc')
-    tokenizer_source = AutoTokenizer.from_pretrained('pirxus/how2_en_bpe8000_tc')
-    tokenizer_target = AutoTokenizer.from_pretrained('pirxus/how2_pt_bpe8000_tc')
+    #tokenizer_target = AutoTokenizer.from_pretrained('pirxus/how2_en_unigram8000_tc')
+    tokenizer_target = AutoTokenizer.from_pretrained('pirxus/how2_en_bpe8000_tc')
+    #if 't5' in training_args.tokenizer_name or 'opus' in training_args.tokenizer_name:
+    #    tokenizer_source = AutoTokenizer.from_pretrained(training_args.tokenizer_name)
+    #    tokenizer_target = tokenizer_source
+    #else:
+    #    tokenizer_source = AutoTokenizer.from_pretrained('pirxus/how2_en_bpe8000_tc')
+    #    tokenizer_target = AutoTokenizer.from_pretrained('pirxus/how2_en_bpe8000_tc')
+    #    #tokenizer_target = AutoTokenizer.from_pretrained('pirxus/how2_pt_bpe8000_tc')
 
 
     def preprocess_function(examples):
         inputs = examples['transcription']
-        targets = examples['translation']
+        targets = examples['transcription']
+        #targets = examples['transcription']
 
-        tokenized_inputs = tokenizer_source(inputs)
-        labels = tokenizer_target(targets)['input_ids']
+        if training_args.tokenizer_name == 'unicamp-dl/translation-en-pt-t5':
+            inputs = [ "translate English to Portuguese: " + s for s in inputs ]
+
+        if training_args.tokenizer_name == 'Helsinki-NLP/opus-mt-tc-big-en-pt':
+            inputs = [ ">>por<< " + s for s in inputs ]
+
 
         model_inputs = {
-                'input_ids': tokenized_inputs['input_ids'],
-                'attention_mask': tokenized_inputs['attention_mask'],
-                'labels': labels,
+                'input_ids': inputs,
+                'labels': targets,
                 }
-
         return model_inputs
+
+
+        #tokenized_inputs = tokenizer_source(inputs)
+        #labels = tokenizer_target(targets)['input_ids']
+
+        #model_inputs = {
+        #        'input_ids': tokenized_inputs['input_ids'],
+        #        'attention_mask': tokenized_inputs['attention_mask'],
+        #        'labels': labels,
+        #        }
+
+        #return model_inputs
 
     tokenized_dataset = dataset.map(
         preprocess_function,
@@ -114,7 +141,7 @@ if __name__ == "__main__":
     }
 
     config = MarianConfig(
-            vocab_size=tokenizer_source.vocab_size,
+            vocab_size=tokenizer_target.vocab_size,
             d_model=256,
             encoder_layers=6,
             decoder_layers=6,
@@ -138,30 +165,73 @@ if __name__ == "__main__":
         model_path = model_args.from_pretrained
         if model_args.average_checkpoints:
             model_path = average_checkpoints_torch(model_path)
+        
 
-        model = MarianMTModel.from_pretrained(model_path)
+        if 't5_english_pre' in model_args.from_pretrained:
+            decoder_config = T5Config.from_pretrained('unicamp-dl/translation-en-pt-t5')
+            t5 = T5ForConditionalGeneration.from_pretrained('unicamp-dl/translation-en-pt-t5')
+            model = T5PlusMarian.from_pretrained(model_args.from_pretrained, decoder_config, t5, tokenizer_target, True)
+            model.freeze_model()
+            model.decoder.lm_head.weight = model.decoder.model.decoder.embed_tokens.weight
+        else:
+
+            model = AutoModelForSeq2SeqLM.from_pretrained(model_path)
+            if training_args.do_train:
+                logger.info("Replacing decoder..")
+
+                model_new = MarianMTModel(config=model.config)
+                model.model.decoder = model_new.model.decoder
+                model.lm_head = model_new.lm_head
+                model.final_logits_bias = model_new.final_logits_bias
+
+                ## freeze encoder
+                for _, param in model.model.encoder.named_parameters():
+                    param.requires_grad = False
+                model.model.encoder.config.update({
+                    'dropout': 0.0,
+                    'attention_dropout': 0.0,
+                    'activation_dropout': 0.0,
+                })
+
+        #model = MarianMTModel.from_pretrained(model_path)
     else:
-        model = MarianMTModel(config=config)
+        config = T5Config.from_pretrained(model_args.base_encoder_model)
+        encoder = T5ForConditionalGeneration.from_pretrained(model_args.base_encoder_model)
+        model = T5PlusMarian(config=config, encoder=encoder, tokenizer=tokenizer_target, freeze_decoder=False)
 
     logger.info(f"Finished loading model {model}")
 
     # 4. Update generation config
-    gen_config = GenerationConfig(
-        bos_token_id=tokenizer_target.bos_token_id,
-        pad_token_id=tokenizer_source.pad_token_id,
-        decoder_start_token_id=tokenizer_target.bos_token_id,
-        decoder_end_token_id=tokenizer_target.eos_token_id,
-        length_penalty=gen_args.length_penalty,
-        early_stopping=gen_args.early_stopping,
-        eos_token_id=tokenizer_target.eos_token_id,
-        max_length=gen_args.max_length,
-        num_beams=gen_args.num_beams,
-    )
+    if isinstance(model, T5ForConditionalGeneration):
+        gen_config = GenerationConfig(
+            bos_token_id=model.config.decoder_start_token_id,
+            pad_token_id=tokenizer_target.pad_token_id,
+            decoder_start_token_id=model.config.decoder_start_token_id,
+            decoder_end_token_id=tokenizer_target.eos_token_id,
+            length_penalty=gen_args.length_penalty,
+            early_stopping=gen_args.early_stopping,
+            eos_token_id=tokenizer_target.eos_token_id,
+            max_length=gen_args.max_length,
+            num_beams=gen_args.num_beams,
+        )
+
+    else:
+        gen_config = GenerationConfig(
+            bos_token_id=tokenizer_target.bos_token_id,
+            pad_token_id=tokenizer_target.pad_token_id,
+            decoder_start_token_id=tokenizer_target.bos_token_id,
+            decoder_end_token_id=tokenizer_target.eos_token_id,
+            length_penalty=gen_args.length_penalty,
+            early_stopping=gen_args.early_stopping,
+            eos_token_id=tokenizer_target.eos_token_id,
+            max_length=gen_args.max_length,
+            num_beams=gen_args.num_beams,
+        )
 
     logger.info(f"Model updating generation config:\n {str(gen_config)}")
     training_args.generation_max_length = gen_args.max_length
     training_args.generation_num_beams = gen_args.num_beams
-    model.generation_config = gen_config
+    model.decoder.generation_config = gen_config
 
 
     # 5. Initialize callbacks
@@ -170,20 +240,16 @@ if __name__ == "__main__":
     if training_args.early_stopping_patience > -1:
         callbacks.append(EarlyStoppingCallback(early_stopping_patience=training_args.early_stopping_patience))
 
-    # 6. Initialize data collator
-    #data_collator = SpeechCollatorWithPadding(
-    #    feature_extractor=feature_extractor,
-    #    tokenizer=tokenizer,
-    #    padding=True,
-    #    sampling_rate=data_args.sampling_rate,
-    #    audio_path=data_args.audio_column_name,
-    #    text_path=data_args.text_column_name,
-    #    model_input_name=model.main_input_name,
-    #)
+    #data_collator = DataCollatorForSeq2Seq(
+    #        tokenizer=tokenizer_source,
+    #        model=model,
+    #        )
 
-    data_collator = DataCollatorForSeq2Seq(
-            tokenizer=tokenizer_source,
-            model=model,
+    data_collator = MultiTokMTCollatorWithPadding(
+            tokenizer_source=tokenizer_source,
+            tokenizer_target=tokenizer_target,
+            source_text_path="input_ids",
+            target_text_path="labels",
             )
 
     # 7. Initialize trainer

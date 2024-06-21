@@ -1,4 +1,4 @@
-"""Main training script for training of attention based encoder decoder ASR models."""
+"""Main training script for the ECED architecture"""
 import sys
 
 from transformers import (
@@ -15,11 +15,14 @@ from transformers import (
     MarianMTModel,
     MarianForCausalLM,
     Blip2QFormerConfig,
+    AutoModelForSeq2SeqLM,
+    T5Config,
+    T5ForConditionalGeneration,
 )
 from transformers.utils import logging
 
 from utilities.callbacks import init_callbacks
-from utilities.collators import SpeechMTCollatorWithPadding
+from utilities.collators import SpeechAlignedCollatorWithPadding
 from utilities.data_utils import get_dataset
 from utilities.eval_utils import compute_metrics_translation
 from utilities.model_utils import average_checkpoints as average_checkpoints
@@ -32,7 +35,10 @@ from utilities.training_arguments import (
     QFormerArguments
 )
 
-from models.s2t_qformer_marian import ApmoConfig, ApmoModel
+from models.s2t_qformer_marian import ApmoConfig
+from models.aligned import SpeechEncoderBridgeMarianEncoderDecoder
+from models.t5_plus_marian import T5PlusMarian
+from models.ctc_encoder_plus_autoregressive_decoder import JointCTCAttentionEncoderDecoder
 from utilities.training_utils import AdditionalLossTrackerTrainer
 
 
@@ -68,6 +74,15 @@ if __name__ == "__main__":
         reshuffle_at_start=data_args.reshuffle_at_start,
     )
 
+    # for lower resource splits of how2..
+    if data_args.how2_low_resource_split_file:
+        logger.info("Creating a low-resource simulated how2 split.")
+
+        with open(data_args.how2_low_resource_split_file) as f:
+            ids = set(map(lambda x: x[:11], f.read().splitlines()))
+
+        dataset['train'] = dataset['train'].filter(lambda ex: ex['audio']['path'][:11] in ids, num_proc=data_args.preprocessing_num_workers)
+
     logger.info(f"Dataset processed successfully.{dataset}")
 
     if training_args.preprocess_dataset_only:
@@ -77,26 +92,52 @@ if __name__ == "__main__":
     # 2. Create feature extractor and tokenizer
     feature_extractor = AutoFeatureExtractor.from_pretrained(training_args.feature_extractor_name)
     tokenizer_target = AutoTokenizer.from_pretrained(training_args.tokenizer_name)
-    tokenizer_source = AutoTokenizer.from_pretrained(training_args.tokenizer_name.replace('pt', 'en'))
+
+    if qformer_args.encoder_prompt_prefix:
+        assert training_args.tokenizer_source_name is not None, "Error: missing source language tokenizer"
+        tokenizer_source = AutoTokenizer.from_pretrained(training_args.tokenizer_source_name)
+    else:
+        tokenizer_source = None
 
     # 3. Instantiate model
+    if 's2t' in model_args.base_encoder_model:
+        encoder = Speech2TextForConditionalGeneration.from_pretrained(model_args.base_encoder_model)
+        d_model = encoder.config.d_model
+    else:
+        encoder = JointCTCAttentionEncoderDecoder.from_pretrained(model_args.base_encoder_model)
+        d_model = encoder.config.encoder.hidden_size
 
-    encoder = Speech2TextForConditionalGeneration.from_pretrained(model_args.base_encoder_model)
-    decoder = MarianMTModel.from_pretrained(model_args.base_decoder_model)
-    #decoder = MarianForCausalLM.from_pretrained(model_args.base_decoder_model)
+    try:
+        if 'mt0' in model_args.base_decoder_model:
+            decoder = AutoModelForSeq2SeqLM.from_pretrained(model_args.base_decoder_model, device_map='auto')
+        elif 't5_english_pre' in model_args.base_decoder_model:
+            decoder_config = T5Config.from_pretrained('unicamp-dl/translation-en-pt-t5')
+            t5 = T5ForConditionalGeneration.from_pretrained('unicamp-dl/translation-en-pt-t5')
+            decoder = T5PlusMarian.from_pretrained(model_args.base_decoder_model, decoder_config, t5, tokenizer_target, True)
+            decoder.freeze_model()
+
+            # cuz sharedtensors...
+            decoder.decoder.lm_head.weight = decoder.decoder.model.decoder.embed_tokens.weight
+
+        else:
+            decoder = AutoModelForSeq2SeqLM.from_pretrained(model_args.base_decoder_model)
+    except:
+        print('exception occured')
+        decoder = AutoModelForSeq2SeqLM.from_pretrained(model_args.base_decoder_model, use_safetensors=False)
+
 
     if model_args.from_config:
         apmo_config = ApmoConfig.from_pretrained(model_args.from_config)
     else:
 
         qformer_config = Blip2QFormerConfig(
-                hidden_size=256,
+                hidden_size=qformer_args.qf_hidden_size,
                 num_hidden_layers=qformer_args.qf_n_layers,
-                num_attention_heads=4,
-                intermediate_size=2048,
+                num_attention_heads=qformer_args.qf_n_attn_heads,
+                intermediate_size=qformer_args.qf_intermediate_size,
                 hidden_act='gelu_new',
                 cross_attention_frequency=1,
-                encoder_hidden_size=encoder.config.d_model
+                encoder_hidden_size=d_model
             )
 
         if qformer_args.qf_config_overrides is not None:
@@ -111,6 +152,7 @@ if __name__ == "__main__":
                 num_query_tokens=qformer_args.n_queries,
                 mm_pooling=qformer_args.qf_mm_pooling,
                 mm_loss_weight=qformer_args.qf_mm_loss_weight,
+                bridge_type=qformer_args.bridge_type,
             )
 
     if model_args.from_pretrained:
@@ -118,17 +160,73 @@ if __name__ == "__main__":
         if model_args.average_checkpoints:
             model_path = average_checkpoints(model_path)
 
-        model = ApmoModel.from_pretrained(model_path)
+        config = ApmoConfig.from_pretrained(model_path)
+        logger.info(f"Loading model from pretrained checkpoint...")
+        
+        # replace the loaded decoder with the specified one
+        if model_args.replace_aligned_decoder:
+            if 't5_asr_pretrain' in model_path:
+                print('here')
+                config_dummy = T5Config.from_pretrained(model_args.base_decoder_model)
+                encoder_dummy = T5ForConditionalGeneration.from_pretrained(model_args.base_decoder_model)
+                tokenizer_dummy = AutoTokenizer.from_pretrained('pirxus/how2_en_bpe8000_tc')
+                decoder_dummy = T5PlusMarian(config=config_dummy, encoder=encoder_dummy, tokenizer=tokenizer_dummy, freeze_decoder=False)
+
+
+                model_dummy = SpeechEncoderBridgeMarianEncoderDecoder.from_pretrained(model_path, config, encoder, decoder_dummy)
+                logger.info(f"Replacing the decoder...")
+
+                model = SpeechEncoderBridgeMarianEncoderDecoder(encoder=encoder, decoder=decoder, config=apmo_config)
+                model.bridge = model_dummy.bridge
+
+            else:
+                decoder_dummy = MarianMTModel(config=decoder.config)
+
+                model = SpeechEncoderBridgeMarianEncoderDecoder.from_pretrained(model_path, config, encoder, decoder_dummy)
+                logger.info(f"Replacing the decoder...")
+                model.decoder = decoder
+        else:
+            model = SpeechEncoderBridgeMarianEncoderDecoder.from_pretrained(model_path, config, encoder, decoder)
+
+        if 'mt0' in model_args.base_decoder_model:
+            for _, param in model.decoder.encoder.named_parameters():
+                param.requires_grad = False
+
+            for _, param in model.decoder.decoder.named_parameters():
+                param.requires_grad = False
+            model.decoder.lm_head.requires_grad = False
+        elif 't5_english_pre' in model_args.base_decoder_model:
+            pass
+        elif 't5' in model_args.base_decoder_model:
+            for _, param in model.decoder.encoder.named_parameters():
+                param.requires_grad = False
+
+            for _, param in model.decoder.decoder.named_parameters():
+                param.requires_grad = False
+
+            if hasattr(model.decoder, 'lm_head'):
+                model.decoder.lm_head.requires_grad = False
+
+        else:
+            for _, param in model.decoder.model.encoder.named_parameters():
+                param.requires_grad = False
+
+            for _, param in model.decoder.model.decoder.named_parameters():
+                param.requires_grad = False
+            model.decoder.lm_head.requires_grad = False
+            model.decoder.final_logits_bias.requires_grad = False
+
     else:
-        model = ApmoModel(encoder=encoder, decoder=decoder, config=apmo_config)
+        model = SpeechEncoderBridgeMarianEncoderDecoder(encoder=encoder, decoder=decoder, config=apmo_config)
 
     logger.info(f"Finished loading model {model}")
 
     # 4. Update generation config
+    bos = decoder.config.decoder_start_token_id if tokenizer_target.bos_token_id is None else tokenizer_target.bos_token_id
     gen_config = GenerationConfig(
-        bos_token_id=tokenizer_target.bos_token_id,
+        bos_token_id=bos,
         pad_token_id=tokenizer_target.pad_token_id,
-        decoder_start_token_id=tokenizer_target.bos_token_id,
+        decoder_start_token_id=bos,
         decoder_end_token_id=tokenizer_target.eos_token_id,
         length_penalty=gen_args.length_penalty,
         early_stopping=gen_args.early_stopping,
@@ -136,31 +234,35 @@ if __name__ == "__main__":
         max_length=gen_args.max_length,
         num_beams=gen_args.num_beams,
     )
+
     logger.info(f"Model updating generation config:\n {str(gen_config)}")
     training_args.generation_max_length = gen_args.max_length
     training_args.generation_num_beams = gen_args.num_beams
     model.generation_config = gen_config
     model.decoder.generation_config = gen_config
+    if hasattr(model.decoder, 'decoder'):
+        model.decoder.decoder.generation_config = gen_config
 
 
     # 5. Initialize callbacks
     callbacks = init_callbacks(data_args, training_args, dataset, feature_extractor)
 
     # 6. Initialize data collator
-    data_collator = SpeechMTCollatorWithPadding(
+    data_collator = SpeechAlignedCollatorWithPadding(
         feature_extractor=feature_extractor,
-        tokenizer_source=tokenizer_source,
         tokenizer_target=tokenizer_target,
+        tokenizer_source=tokenizer_source,
         padding=True,
         sampling_rate=data_args.sampling_rate,
         audio_path=data_args.audio_column_name,
-        target_text_path='translation',
-        source_text_path='transcription',
+        text_path=data_args.text_column_name,
         model_input_name=model.main_input_name,
-        )
+        encoder_prompt_prefix=qformer_args.encoder_prompt_prefix,
+    )
 
     # 7. Initialize trainer
     trainer_class = AdditionalLossTrackerTrainer if qformer_args.qf_mm_loss_weight > 0 else Seq2SeqTrainer
+    trainer = Seq2SeqTrainer
     trainer = trainer_class(
             args=training_args,
             model=model,
