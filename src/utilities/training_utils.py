@@ -240,7 +240,7 @@ class AdditionalLossTrackerTrainer(Seq2SeqTrainer):
         outputs = model(**inputs)
 
         if hasattr(self.state, "additional_logs"):
-            self.state.additional_logs.append([outputs.enc_loss.mean(), outputs.dec_loss.mean()])
+            self.state.additional_logs.append([outputs.enc_loss.mean().cpu().item(), outputs.dec_loss.mean().cpu().item()])
 
         # Save past state if it exists
         if self.args.past_index >= 0:

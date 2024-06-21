@@ -28,6 +28,9 @@ class ModelArguments:
     from_encoder_decoder_config: Optional[bool] = field(
         default=False, metadata={"help": "Whether to create model from encoder and decoder configs."}
     )
+    replace_aligned_decoder: Optional[bool] = field(
+        default=False, metadata={"help": "Whether to replace the decoder of the model specified in from_pretrained."}
+    )
     config_overrides: Optional[str] = field(
         default=None,
         metadata={
@@ -72,6 +75,9 @@ class GeneralTrainingArguments(Seq2SeqTrainingArguments):
     tokenizer_name: Optional[str] = field(
         default=None, metadata={"help": "Pretrained tokenizer name or path if not the same as model_name"}
     )
+    tokenizer_source_name: Optional[str] = field(
+        default=None, metadata={"help": "Pretrained tokenizer name or path for the encoder source language."}
+    )
     feature_extractor_name: Optional[str] = field(
         default=None, metadata={"help": "feature extractor name or path if not the same as model_name"}
     )
@@ -87,6 +93,9 @@ class GeneralTrainingArguments(Seq2SeqTrainingArguments):
     )
     freeze_encoder_epochs: Optional[int] = field(default=None, metadata={"help": "Freezes the encoder for the specified number of epochs."})
     qformer_eval_callback: Optional[bool] = field(default=False, metadata={"help": "Makes sure the encoder and decoder for a qformer model are put into eval mode for training."})
+    qf_enc_unfreeze_epochs: Optional[int] = field(default=None, metadata={"help": "Unfreezes the qformer model encoder after a certain number of epochs."})
+    qf_dec_unfreeze_epochs: Optional[int] = field(default=None, metadata={"help": "Unfreezes the qformer model decoder after a certain number of epochs."})
+    qf_pretrain_epochs: Optional[int] = field(default=0, metadata={"help": "Number of pretraining epochs for the Qformer."})
     mask_unks: Optional[bool] = field(
         default=False, metadata={"help": "Whether to mask unknown tokens for cross entropy."}
     )
@@ -137,7 +146,7 @@ class GenerationArguments:
     num_predictions_to_return: Optional[int] = field(default=1, metadata={"help": "Number of predictions to return."})
     nbest_path_to_save: Optional[str] = field(default="nbests", metadata={"help": "Path to save nbest hypotheses."})
     save_output_states: Optional[bool] = field(default=False, metadata={"help": "Whether to save output states."})
-    post_process_predicitons: Optional[bool] = field(
+    post_process_predictions: Optional[bool] = field(
         default=False, metadata={"help": "Whether to post process predictions."}
     )
     apply_eos_space_trick: Optional[bool] = field(default=False, metadata={"help": "Whether to apply eos space trick."})
@@ -231,6 +240,9 @@ class DataTrainingArguments:
     load_pure_dataset_only: Optional[bool] = field(
         default=False, metadata={"help": "Whether to load only the pure dataset without any preprocessing."}
     )
+    how2_low_resource_split_file: Optional[str] = field(
+        default=None, metadata={"help": "Path to a file specifying utterance ids to keep in the how2 dataset."}
+    )
 
 
 @dataclass
@@ -280,13 +292,15 @@ class QFormerArguments:
     qformer_config: Optional[str] = field(
         default=None, metadata={"help": "Path to pretrained qformer model/config or model/config identifier from huggingface.co/models"}
     )
+    bridge_type: Optional[str] = field(default='qformer', metadata={"help": "Architecture of the bridge network (qformer, conv)."})
+    encoder_prompt_prefix: Optional[str] = field(default=None, metadata={"help": "Encoder prompt prefix for instruction-tuned models such as T5."})
     n_queries: Optional[int] = field(default=80, metadata={"help": "Number of qformer queries."})
-    qf_n_layers: Optional[int] = field(default=2, metadata={"help": "Number of qformer layers."})
-    qf_hidden_size: Optional[int] = field(default=768, metadata={"help": "Qformer hidden dimension."})
-    qf_n_attn_heads: Optional[int] = field(default=12, metadata={"help": "Number of qformer heads."})
-    qf_intermediate_size: Optional[int] = field(default=3072, metadata={"help": "Qformer intermediate layer dimension."})
-    qf_mm_pooling: Optional[str] = field(default=None, metadata={"help": "Modality-matching loss pooling method."}
-    )
+    qf_n_layers: Optional[int] = field(default=6, metadata={"help": "Number of qformer layers."})
+    qf_hidden_size: Optional[int] = field(default=256, metadata={"help": "Qformer hidden dimension."})
+    qf_n_attn_heads: Optional[int] = field(default=6, metadata={"help": "Number of qformer heads."})
+    qf_intermediate_size: Optional[int] = field(default=2048, metadata={"help": "Qformer intermediate layer dimension."})
+    qf_mm_pooling: Optional[str] = field(default=None, metadata={"help": "Modality-matching loss pooling method."})
+    qf_mm_micro_loss: Optional[str] = field(default='dot', metadata={"help": "Modality-matching micro loss function."})
     qf_mm_loss_weight: Optional[float] = field(default=0.0, metadata={"help": "Modality-matching loss weight."})
     qf_config_overrides: Optional[str] = field(
         default=None,

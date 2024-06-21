@@ -152,7 +152,7 @@ def do_evaluate(
             )
         logger.info(f"Metrics for {split} split: {predictions.metrics}")
 
-        if gen_args.post_process_predicitons and data_args.text_transformations is not None:
+        if gen_args.post_process_predictions and data_args.text_transformations is not None:
             callable_transform = function_aggregator(
                 [
                     text_transform_partial(

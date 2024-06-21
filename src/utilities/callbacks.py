@@ -6,6 +6,7 @@ from functools import partial
 from typing import Dict, List, Tuple, Union
 
 import numpy as np
+import sys
 import torch
 import torch.multiprocessing as mp
 from datasets import DatasetDict
@@ -67,6 +68,30 @@ class QFormerModelEvalCallback(TrainerCallback):
             model.encoder_decoder_eval()
         except:
             logger.info("QFormer: eval mode failed")
+
+class QFormerModelPretrainCallback(TrainerCallback):
+    def __init__(self, n_pretrain_epochs: int):
+        self.n_pretrain_epochs = n_pretrain_epochs
+
+    def on_epoch_begin(self, args, state, control, model, **kwargs):
+        if state.epoch > self.n_pretrain_epochs:
+            logger.info("QFormer: ending the pretraining phase.")
+            model.pretraining = False
+
+class QFormerModelFinetuneCallback(TrainerCallback):
+    """Handles unfreezing the encoder or decoder of a qformer model after n epochs"""
+    def __init__(self, enc_epochs=None, dec_epochs=None):
+        self.enc_epochs = enc_epochs
+        self.dec_epochs = dec_epochs
+
+    def on_epoch_begin(self, args, state, control, model, **kwargs):
+        if self.enc_epochs is not None and state.epoch >= self.enc_epochs:
+            logger.info("QFormer: unfreezing the encoder for finetuning")
+            model.unfreeze_encoder()
+
+        if self.dec_epochs is not None and state.epoch >= self.dec_epochs:
+            logger.info("QFormer: unfreezing the decoder for finetuning")
+            model.unfreeze_decoder()
 
 class GumbelTemperatureCallback(TrainerCallback):
     def __init__(self, gumbel_temperature_decay: float, min_gumbel_temperature: float, max_gumbel_temperature: float):
@@ -239,4 +264,11 @@ def init_callbacks(
         callbacks.append(EncoderFreezer(training_args.freeze_encoder_epochs))
     if training_args.qformer_eval_callback:
         callbacks.append(QFormerModelEvalCallback())
+    if training_args.qf_enc_unfreeze_epochs or training_args.qf_dec_unfreeze_epochs:
+        callbacks.append(QFormerModelFinetuneCallback(
+            enc_epochs=training_args.qf_enc_unfreeze_epochs,
+            dec_epochs=training_args.qf_dec_unfreeze_epochs
+            ))
+    if training_args.qf_pretrain_epochs:
+        callbacks.append(QFormerModelPretrainCallback(training_args.qf_pretrain_epochs))
     return callbacks
