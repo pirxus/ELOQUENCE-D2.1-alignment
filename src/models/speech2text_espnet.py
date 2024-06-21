@@ -12,7 +12,20 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch Speech2Text model."""
+""" PyTorch Speech2Text model.
+
+This model is a replication of the ESPnet transformer models from:
+    https://github.com/espnet/espnet/tree/master/egs/how2/asr1
+
+These models differ form the Speech2Text HF implementation in the conv. subsampler
+used. The alteration in this file adds the conv2d subsampler used by ESPnet. To use
+this model, import it directly through local paths..
+
+Apart from the Conv2d subsampler class and the alteration made to the S2T encoder,
+all of the code was copied from original HF source files to maintain compatibility.
+
+Added by: Simon Sedlacek
+"""
 
 import math
 from typing import Optional, Tuple, Union
@@ -104,6 +117,8 @@ class Conv1dSubsampler(nn.Module):
 
 class Conv2dSubsampler(torch.nn.Module):
     """Convolutional 2D subsampling (to 1/4 length).
+    Added by: Simon Sedlacek
+    This implementation is an altered version of fairseq's conv2d subsampler.
 
     Args:
         idim (int): Input dimension.

@@ -36,7 +36,7 @@ from utilities.training_arguments import (
     QFormerArguments
 )
 
-from models.s2t_qformer_marian import ApmoConfig
+from models.old_alignment import ApmoConfig
 from models.aligned import SpeechEncoderBridgeTextDecoder
 from models.ctc_encoder_plus_autoregressive_decoder import JointCTCAttentionEncoderDecoder
 from utilities.training_utils import AdditionalLossTrackerTrainer

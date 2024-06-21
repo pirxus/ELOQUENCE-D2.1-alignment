@@ -1,3 +1,9 @@
+"""
+This module implements the ASR + QFormer + decoder LM alignment model.
+
+Author: Simon Sedlacek
+"""
+
 from dataclasses import dataclass
 from transformers import (
 
@@ -6,7 +12,7 @@ from transformers import (
     Blip2QFormerConfig,
     Blip2QFormerModel,
 )
-from transformers.modeling_outputs import Seq2SeqLMOutput, BaseModelOutput, ModelOutput
+from transformers.modeling_outputs import ModelOutput
 
 from torch.nn import CrossEntropyLoss
 
@@ -15,31 +21,13 @@ from typing import Optional, Tuple, Union, Any
 import torch
 from torch import nn
 import torch.nn.functional as F
-
-
-# Copied from transformers.models.bart.modeling_bart.shift_tokens_right
-def shift_tokens_right(input_ids: torch.Tensor, pad_token_id: int, decoder_start_token_id: int):
-    """
-    Shift input ids one token to the right.
-    """
-    shifted_input_ids = input_ids.new_zeros(input_ids.shape)
-    shifted_input_ids[:, 1:] = input_ids[:, :-1].clone()
-    shifted_input_ids[:, 0] = decoder_start_token_id
-
-    if pad_token_id is None:
-        raise ValueError("self.model.config.pad_token_id has to be defined.")
-    # replace possible -100 values in labels by `pad_token_id`
-    shifted_input_ids.masked_fill_(shifted_input_ids == -100, pad_token_id)
-
-    return shifted_input_ids
-
+from models.utils import shift_tokens_right
 
 
 @dataclass
 class SpeechQFormerEncoderDecoderModelOutput(ModelOutput):
     """
-    TODO: rewrite
-    Class defining the outputs of [`Blip2ForConditionalGeneration`].
+    Model output class for the ASR + conn + LM aligned models.
 
     Args:
         loss (`torch.FloatTensor`, *optional*, returned when `labels` is provided, `torch.FloatTensor` of shape `(1,)`):
@@ -118,6 +106,8 @@ class  SpeechQFormerEncoderDecoderConfig(PretrainedConfig):
 
 class SpeechQFormerEncoderDecoder(PreTrainedModel):
     """
+    ASR enc. + qformer + decoder only LM (GPT2)
+
     This class has been modified from it's original version taken
     from: https://github.com/huggingface/transformers/blob/main/src/transformers/models/blip_2/modeling_blip_2.py
     """
@@ -134,7 +124,10 @@ class SpeechQFormerEncoderDecoder(PreTrainedModel):
         super().__init__(config)
 
         if encoder:
-            self.encoder = encoder.get_encoder()
+            try:
+                self.encoder = encoder.get_encoder()
+            except:
+                self.encoder = encoder.encoder
         else:
             raise ValueError("Encoder model needs to be supplied")
             #self.encoder = Speech2TextModel(config=config.encoder_config)
@@ -203,18 +196,17 @@ class SpeechQFormerEncoderDecoder(PreTrainedModel):
         encoder_outputs = self.encoder(
             input_features,
             attention_mask=attention_mask,
-            head_mask=head_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_dict=return_dict
+            return_dict=True,
         )
 
-        audio_embeds = encoder_outputs[0]
+        audio_embeds = encoder_outputs.last_hidden_state
 
         # downsample encoder attention mask
         if attention_mask is not None:
             audio_attention_mask = self.encoder._get_feature_vector_attention_mask(
-                encoder_outputs[0].shape[1], attention_mask
+                encoder_outputs.last_hidden_state.shape[1], attention_mask
             )
         else:
             audio_attention_mask = None
@@ -288,8 +280,8 @@ class SpeechQFormerEncoderDecoder(PreTrainedModel):
             lm_loss = loss_fct(shift_logits.view(-1, self.config.decoder.vocab_size), shift_labels.view(-1))
 
         # combine the losses
-        if lm_loss is None: lm_loss = torch.tensor(0)
-        if mm_loss is None: mm_loss = torch.tensor(0)
+        if lm_loss is None: lm_loss = 0
+        if mm_loss is None: mm_loss = 0
         loss = self.config.ce_loss_weight * lm_loss + self.config.mm_loss_weight * mm_loss
 
         if not return_dict:
@@ -301,7 +293,7 @@ class SpeechQFormerEncoderDecoder(PreTrainedModel):
             enc_loss=mm_loss.detach(),
             dec_loss=lm_loss.detach(),
             logits=logits,
-            audio_outputs=encoder_outputs,
+            audio_outputs=audio_embeds,
             qformer_outputs=query_outputs,
             language_model_outputs=outputs,
         )
@@ -323,7 +315,7 @@ class SpeechQFormerEncoderDecoder(PreTrainedModel):
             return_dict=True
         )
 
-        audio_embeds = encoder_outputs[0]
+        audio_embeds = encoder_outputs.last_hidden_state
 
         # downsample encoder attention mask
         if attention_mask is not None:
