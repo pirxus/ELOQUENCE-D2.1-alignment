@@ -139,7 +139,7 @@ args=(
 )
 
 echo "Running training.."
-python src/trainers/eval_cascade_slt.py "${args[@]}"
+python src/trainers/alignment/eval_cascade_slt.py "${args[@]}"
 
 # delete the ssd directory
 echo "Cleaning the ssd directory.."

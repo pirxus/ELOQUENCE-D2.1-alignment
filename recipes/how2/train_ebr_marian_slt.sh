@@ -142,7 +142,7 @@ args=(
 )
 
 echo "Running training.."
-python src/trainers/train_s2t_marian_slt.py "${args[@]}"
+python src/trainers/alignment/train_s2t_marian_slt.py "${args[@]}"
 
 # delete the ssd directory
 echo "Cleaning the ssd directory.."

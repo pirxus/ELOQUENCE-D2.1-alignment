@@ -128,4 +128,4 @@ args=(
 )
 
 echo "Running training.."
-python src/trainers/train_mt.py "${args[@]}"
+python src/trainers/alignment/train_mt.py "${args[@]}"
