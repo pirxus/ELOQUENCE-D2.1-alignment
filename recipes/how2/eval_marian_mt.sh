@@ -76,7 +76,7 @@ args=(
   --dataloader_num_workers="4"
   --num_train_epochs="50"
   --group_by_length="True"
-  --bf16
+  #--bf16
   #--do_train
   --do_evaluate
   --load_best_model_at_end
@@ -136,7 +136,6 @@ args=(
   --num_beams="10"
   --max_length="150"
   --predict_with_generate
-  --decoding_ctc_weight="0.0"
   --eval_beam_factor="1"
 )
 

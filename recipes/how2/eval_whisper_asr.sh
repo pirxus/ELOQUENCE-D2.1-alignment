@@ -1,14 +1,14 @@
 #!/bin/bash
-#$ -N ebr_small_8k_bpe
-#$ -q long.q@supergpu*
+#$ -N eval_whisper_how2_en_normalized
+#$ -q short.q@supergpu*
 #$ -l ram_free=40G,mem_free=40G
 #$ -l matylda6=0.5
 #$ -l ssd=1,ssd_free=200G
 #$ -l gpu=1,gpu_ram=20G
-#$ -o /mnt/matylda6/xsedla1h/projects/job_logs/ebr_asr/ebr_small_8k_bpe.o
-#$ -e /mnt/matylda6/xsedla1h/projects/job_logs/ebr_asr/ebr_small_8k_bpe.e
+#$ -o /mnt/matylda6/xsedla1h/projects/job_logs/asr_eval/eval_whisper_how2_en_normalized.o
+#$ -e /mnt/matylda6/xsedla1h/projects/job_logs/asr_eval/eval_whisper_how2_en_normalized.e
 
-EXPERIMENT="ebr_small_8k_bpe"
+EXPERIMENT="eval_whisper_how2_en_normalized"
 
 # Job should finish in 1 days
 ulimit -t 100000
@@ -68,15 +68,11 @@ args=(
   # General training arguments
   --output_dir=$EXPERIMENT_PATH
   --per_device_train_batch_size="32"
-  --per_device_eval_batch_size="32"
-  --dataloader_num_workers="24"
+  --per_device_eval_batch_size="8"
+  --dataloader_num_workers="8"
   --num_train_epochs="70"
   --group_by_length="True"
-  --bf16
-  --do_train
   --do_evaluate
-  --joint_decoding_during_training
-  --load_best_model_at_end
   
   # Optimizer related arguments
   --optim="adamw_torch"
@@ -111,27 +107,22 @@ args=(
   --text_column="transcription"
   --validation_split val
   --test_splits val dev5
-  --text_transformations do_lower_case lcrm
+  #--text_transformations do_lower_case remove_punctuation
+  #--text_transformations whisper_normalize_english
 
   # Preprocessing related arguments
-  --data_preprocessing_config="${RECIPE_DIR}/data_preprocessing.json"
+  --data_preprocessing_config="${WORK_DIR}/configs/default_data_preprocessing_whisper.json"
 
   # Model related arguments
-  --from_encoder_decoder_config
-  --tokenizer_name="pirxus/how2_en_bpe8000_lcrm"
-  --feature_extractor_name="pirxus/features_fbank_80"
-  --base_encoder_model="Lakoc/fisher_ebranchformer_enc_12_layers_fixed"
-  --base_decoder_model="Lakoc/gpt2_tiny_decoder_6_layers"
-  --ctc_weight="0.3"
-  --decoder_pos_emb_fixed
-  --expect_2d_input
+  --tokenizer_name="openai/whisper-small.en"
+  --feature_extractor_name="openai/whisper-small.en"
+  --from_pretrained="openai/whisper-small.en"
 
   # Generation related arguments
   --num_beams="1"
-  --max_length="150"
+  --max_length="448"
   --predict_with_generate
-  --decoding_ctc_weight="0.3"
-  --eval_beam_factor="5"
+  #--post_process_predictions
 )
 
 echo "Running training.."

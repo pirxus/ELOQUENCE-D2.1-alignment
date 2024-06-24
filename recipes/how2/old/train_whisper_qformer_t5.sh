@@ -1,18 +1,18 @@
 #!/bin/bash
-#$ -N qf_mt_6l_128_no_mm_lr_long_init_cb
+#$ -N qf_whisper_t5_6l_256d_100q
 #$ -q long.q@supergpu*
 #$ -l ram_free=40G,mem_free=40G
 #$ -l matylda6=0.5
 #$ -l ssd=1,ssd_free=200G
 #$ -l gpu=1,gpu_ram=20G
-#$ -o /mnt/matylda6/xsedla1h/projects/job_logs/qformer/qf_mt_6l_128_no_mm_lr_long_init_cb.o
-#$ -e /mnt/matylda6/xsedla1h/projects/job_logs/qformer/qf_mt_6l_128_no_mm_lr_long_init_cb.e
+#$ -o /mnt/matylda6/xsedla1h/projects/job_logs/qformer_tests/qf_whisper_t5_6l_256d_100q.o
+#$ -e /mnt/matylda6/xsedla1h/projects/job_logs/qformer_tests/qf_whisper_t5_6l_256d_100q.e
 #
 
-EXPERIMENT="qf_mt_6l_128_no_mm_lr_long_init_cb"
+EXPERIMENT="qf_whisper_t5_6l_256d_100q"
 
 # Job should finish in about 1 day
-ulimit -t 100000
+ulimit -t 150000
 
 # Enable opening multiple files
 ulimit -n 4096
@@ -77,13 +77,16 @@ args=(
   --do_evaluate
   --load_best_model_at_end
   --qformer_eval_callback
+  #--qf_enc_unfreeze_epochs="40"
+  #--qf_dec_unfreeze_epochs="40"
+  --eval_delay="15.0"
 
   #--restart_from="/mnt/matylda6/xsedla1h/projects/huggingface_asr/exp/s2t_50ep_no_pert_cont/checkpoint-21270"
 
   # Optimizer related arguments
   --optim="adamw_torch"
   --learning_rate="2e-4"
-  --warmup_steps="15000"
+  --warmup_steps="12000"
   --early_stopping_patience="10"
   --weight_decay="1e-5"
   --max_grad_norm="5.0"
@@ -114,24 +117,29 @@ args=(
   --text_column_name="translation"
   --validation_split val
   --test_splits val dev5
-  #--do_lower_case
-  #--lcrm
 
   # Preprocessing related arguments
-  --data_preprocessing_config="${RECIPE_DIR}/data_preprocessing_no_spec.json"
+  #--data_preprocessing_config="${RECIPE_DIR}/data_preprocessing_no_spec.json"
+  --data_preprocessing_config="${RECIPE_DIR}/data_preprocessing_whisper.json"
 
   # Model related arguments
-  --tokenizer_name="pirxus/how2_pt_bpe8000_tc"
-  --feature_extractor_name="pirxus/features_fbank_80"
-  --base_encoder_model="/mnt/matylda6/xsedla1h/projects/huggingface_asr/exp/s2t_fixed_v2_1d/average_checkpoint/"
-  --base_decoder_model="/mnt/matylda6/xsedla1h/projects/huggingface_asr/exp/mt_marian_bpe/checkpoint-69360/"
-  --n_queries=128
+  --tokenizer_name="unicamp-dl/translation-en-pt-t5"
+  #--feature_extractor_name="pirxus/features_fbank_80"
+  --feature_extractor_name="openai/whisper-small.en"
+  #--base_encoder_model="/mnt/matylda6/xsedla1h/projects/huggingface_asr/exp/ebr_small_first_5k/checkpoint-85110/"
+  #--base_encoder_model="BUT-FIT/EBranchRegulaFormer-medium"
+  --base_encoder_model="openai/whisper-small.en"
+  --base_decoder_model="unicamp-dl/translation-en-pt-t5"
+  --n_queries=100
   --qf_n_layers=6
+  --qf_hidden_size=256
+  --qf_n_attn_heads=4
+  --qf_intermediate_size=2048
   --qf_mm_loss_weight="0.0"
   --qf_mm_pooling="avg"
 
   # Generation related arguments
-  --num_beams="10"
+  --num_beams="5"
   --max_length="150"
   --predict_with_generate
   --decoding_ctc_weight="0.0"
@@ -139,7 +147,7 @@ args=(
 )
 
 echo "Running training.."
-python src/trainers/train_qformer_slt.py "${args[@]}"
+python src/trainers/train_qformer_t5.py "${args[@]}"
 
 # delete the ssd directory
 echo "Cleaning the ssd directory.."

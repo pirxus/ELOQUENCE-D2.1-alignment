@@ -1,13 +1,15 @@
 #!/bin/bash
-#$ -N mt_marian_bpe
+#$ -N marian_english_pre
 #$ -q long.q@supergpu*
 #$ -l ram_free=20G,mem_free=20G
 #$ -l matylda6=0.5
 #$ -l scratch=0.5
 #$ -l gpu=1,gpu_ram=16G
-#$ -o /mnt/matylda6/xsedla1h/projects/job_logs/mt/mt_marian_bpe.o
-#$ -e /mnt/matylda6/xsedla1h/projects/job_logs/mt/mt_marian_bpe.e
+#$ -o /mnt/matylda6/xsedla1h/projects/job_logs/mt/marian_english_pre.o
+#$ -e /mnt/matylda6/xsedla1h/projects/job_logs/mt/marian_english_pre.e
 #
+
+EXPERIMENT="marian_english_pre"
 
 # Job should finish in about 1 day
 ulimit -t 100000
@@ -28,12 +30,12 @@ unset PYTHONPATH
 unset PYTHONHOME
 source /mnt/matylda6/xsedla1h/miniconda3/bin/activate /mnt/matylda6/xsedla1h/envs/huggingface_asr
 
-EXPERIMENT="mt_marian_bpe"
 
 WORK_DIR="/mnt/matylda6/xsedla1h/projects/huggingface_asr"
 EXPERIMENT_PATH="${WORK_DIR}/exp/${EXPERIMENT}"
 RECIPE_DIR="${WORK_DIR}/recipes/how2"
-HOW2_BASE="/mnt/scratch/tmp/kesiraju/how2"
+#HOW2_BASE="/mnt/scratch/tmp/kesiraju/how2"
+HOW2_BASE="/mnt/matylda6/xsedla1h/data/how2_text"
 HOW2_PATH="/mnt/ssd/xsedla1h/${EXPERIMENT}/how2"
 
 cd $WORK_DIR || {
@@ -64,18 +66,17 @@ export WANDB_PROJECT="mt"
 #echo "Copying data to ssd.."
 #cp -r $HOW2_BASE /mnt/ssd/xsedla1h/${EXPERIMENT}
 
-
 args=(
   # General training arguments
   --output_dir=$EXPERIMENT_PATH
-  --per_device_train_batch_size="64" # 64
-  --per_device_eval_batch_size="64"
+  --per_device_train_batch_size="128" # 64
+  --per_device_eval_batch_size="32"
   --dataloader_num_workers="4"
-  --num_train_epochs="50"
+  --num_train_epochs="70"
   --group_by_length="True"
   --bf16
   --do_train
-  #--do_evaluate
+  --do_evaluate
   --load_best_model_at_end
 
   #--restart_from="/mnt/matylda6/xsedla1h/projects/huggingface_asr/exp/s2t_50ep_no_pert_cont/checkpoint-21270"
@@ -96,8 +97,8 @@ args=(
   --save_strategy="epoch"
   --evaluation_strategy="epoch"
   --wandb_predictions_to_save=50 # 60
-  --greater_is_better="True"
-  --metric_for_best_model="eval_bleu"
+  --greater_is_better="False"
+  #--metric_for_best_model="eval_bleu"
   --save_total_limit="5"
 
   # Data related arguments
@@ -120,17 +121,21 @@ args=(
 
   # Preprocessing related arguments
   #--data_preprocessing_config="${RECIPE_DIR}/data_preprocessing.json"
+  --load_pure_dataset_only
+  --skip_audio_processing
 
   # Model related arguments
-  #--tokenizer_name="pirxus/how2_pt_bpe8000_tc"
+  --tokenizer_name="pirxus/how2_pt_bpe8000_tc"
   #--feature_extractor_name="pirxus/features_fbank_80"
   #--from_config="facebook/s2t-medium-librispeech-asr"
+
+  --from_pretrained="/mnt/matylda6/xsedla1h/projects/huggingface_asr/exp/mt_marian_bpe/checkpoint-69360"
+  #--average_checkpoints
 
   # Generation related arguments
   --num_beams="10"
   --max_length="150"
   --predict_with_generate
-  --decoding_ctc_weight="0.0"
   --eval_beam_factor="1"
 )
 
