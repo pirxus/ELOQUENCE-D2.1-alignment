@@ -132,7 +132,7 @@ args=(
   #--base_encoder_model="BUT-FIT/EBranchRegulaFormer-medium"
   --base_decoder_model="/mnt/matylda6/xsedla1h/projects/huggingface_asr/exp/mt_marian_bpe/checkpoint-69360/"
   --n_queries=60
-  --qf_n_layers=6
+  --conn_layers=6
   --qf_mm_loss_weight="1.0"
   --qf_mm_pooling="avg"
 

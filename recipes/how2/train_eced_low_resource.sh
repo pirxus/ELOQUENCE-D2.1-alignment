@@ -145,24 +145,24 @@ args=(
   --tokenizer_name="unicamp-dl/translation-en-pt-t5"
   --tokenizer_source_name="unicamp-dl/translation-en-pt-t5"
   --base_decoder_model="unicamp-dl/translation-en-pt-t5"
-  --encoder_prompt_prefix='translate English to Portuguese: '
+  --prompt_prefix='translate English to Portuguese: '
   #
   #--tokenizer_name="Helsinki-NLP/opus-mt-tc-big-en-pt"
   #--tokenizer_source_name="Helsinki-NLP/opus-mt-tc-big-en-pt"
   #--base_decoder_model="Helsinki-NLP/opus-mt-tc-big-en-pt"
-  #--encoder_prompt_prefix='>>por<< '
+  #--prompt_prefix='>>por<< '
  
   #--tokenizer_name="bigscience/mt0-small"
   #--tokenizer_source_name="bigscience/mt0-small"
   #--base_decoder_model="bigscience/mt0-small"
-  #--encoder_prompt_prefix='repeat this sentence: '
+  #--prompt_prefix='repeat this sentence: '
 
-  #--bridge_type='qformer'
-  --bridge_type='conv'
+  #--connector_type='qformer'
+  --connector_type='conv'
   --n_queries=100
-  --qf_n_layers=6
-  --qf_hidden_size=256
-  --qf_n_attn_heads=4
+  --conn_layers=6
+  --conn_hidden_size=256
+  --conn_attn_heads=4
   --qf_intermediate_size=2048
 
   # Generation related arguments

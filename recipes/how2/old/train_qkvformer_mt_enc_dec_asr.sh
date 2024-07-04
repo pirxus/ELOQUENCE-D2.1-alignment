@@ -122,7 +122,7 @@ args=(
   #--base_encoder_model="BUT-FIT/EBranchRegulaFormer-medium"
   --base_decoder_model="/mnt/matylda6/xsedla1h/projects/huggingface_asr/exp/marian_english_pre/checkpoint-49852"
   --n_queries=60
-  --qf_n_layers=6
+  --conn_layers=6
 
   # Generation related arguments
   --num_beams="5"

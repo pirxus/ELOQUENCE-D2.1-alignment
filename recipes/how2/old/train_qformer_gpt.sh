@@ -131,9 +131,9 @@ args=(
   --base_decoder_model="pierreguillou/gpt2-small-portuguese"
   # qformer
   --n_queries=100
-  --qf_n_layers=6
-  --qf_hidden_size=512
-  --qf_n_attn_heads=8
+  --conn_layers=6
+  --conn_hidden_size=512
+  --conn_attn_heads=8
   #--qf_intermediate_size=3072
   --qf_intermediate_size=2048
   --qf_mm_pooling="avg"

@@ -10,7 +10,7 @@
 #
 ## used to train a joint SLT model with a S2T encoder and MarianMT decoder
 
-EXPERIMENT="ecd_alex_ste_6l_opus"
+EXPERIMENT="test"
 
 # Job should finish in about 1 day
 ulimit -t 150000
@@ -21,7 +21,6 @@ ulimit -n 4096
 # Enable to save bigger checkpoints
 ulimit -f unlimited
 
-# Enable more threads per process by increasing virtual memory (https://stackoverflow.com/questions/344203/maximum-number-of-threads-per-process-in-linux)
 ulimit -v unlimited
 ulimit -u 4096
 
@@ -125,38 +124,38 @@ args=(
   #--from_pretrained="/mnt/matylda6/xsedla1h/projects/huggingface_asr/exp/arch_1_ebr_cte_marian_6l/checkpoint-92202"
 
   --feature_extractor_name="pirxus/features_fbank_80"
-  #--base_encoder_model="/mnt/matylda6/xsedla1h/projects/huggingface_asr/exp/ebr_small_first_5k/checkpoint-85110/"
-  --base_encoder_model="BUT-FIT/EBranchRegulaFormer-medium"
+  --base_encoder_model="/mnt/matylda6/xsedla1h/projects/huggingface_asr/exp/masters/ebr_small_first_5k/checkpoint-85110/"
+  #--base_encoder_model="BUT-FIT/EBranchRegulaFormer-medium"
   #--feature_extractor_name="openai/whisper-small.en"
   #--base_encoder_model="openai/whisper-small.en"
 
   #--tokenizer_name="pirxus/how2_en_bpe8000_tc"
-  #--tokenizer_name="pirxus/how2_pt_bpe8000_tc"
-  #--tokenizer_source_name="pirxus/how2_en_bpe8000_tc"
-  #--base_decoder_model="/mnt/matylda6/xsedla1h/projects/huggingface_asr/exp/mt_marian_bpe/checkpoint-69360/"
+  --tokenizer_name="pirxus/how2_pt_bpe8000_tc"
+  --tokenizer_source_name="pirxus/how2_en_bpe8000_tc"
+  --base_decoder_model="/mnt/matylda6/xsedla1h/projects/huggingface_asr/exp/masters/mt_marian_bpe/checkpoint-69360/"
   #--base_decoder_model="/mnt/matylda6/xsedla1h/projects/huggingface_asr/exp/marian_english_pre/checkpoint-49852"
   #
   #--tokenizer_name="unicamp-dl/translation-en-pt-t5"
   #--tokenizer_source_name="unicamp-dl/translation-en-pt-t5"
   #--base_decoder_model="unicamp-dl/translation-en-pt-t5"
-  #--encoder_prompt_prefix='translate English to Portuguese: '
+  #--prompt_prefix='translate English to Portuguese: '
   #
-  --tokenizer_name="Helsinki-NLP/opus-mt-tc-big-en-pt"
-  --tokenizer_source_name="Helsinki-NLP/opus-mt-tc-big-en-pt"
-  --base_decoder_model="Helsinki-NLP/opus-mt-tc-big-en-pt"
-  #--encoder_prompt_prefix='>>por<< '
+  #--tokenizer_name="Helsinki-NLP/opus-mt-tc-big-en-pt"
+  #--tokenizer_source_name="Helsinki-NLP/opus-mt-tc-big-en-pt"
+  #--base_decoder_model="Helsinki-NLP/opus-mt-tc-big-en-pt"
+  #--prompt_prefix='>>por<< '
  
   #--tokenizer_name="bigscience/mt0-small"
   #--tokenizer_source_name="bigscience/mt0-small"
   #--base_decoder_model="bigscience/mt0-small"
-  #--encoder_prompt_prefix='translate to Portuguese: '
+  #--prompt_prefix='translate to Portuguese: '
 
-  #--bridge_type='qformer'
-  --bridge_type='conv'
+  #--connector_type='qformer'
+  --connector_type='conv'
   --n_queries=100
-  --qf_n_layers=6
-  --qf_hidden_size=256
-  --qf_n_attn_heads=4
+  --conn_layers=6
+  --conn_hidden_size=256
+  --conn_attn_heads=4
   --qf_intermediate_size=2048
 
   # Generation related arguments
