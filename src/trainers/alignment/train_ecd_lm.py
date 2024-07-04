@@ -1,30 +1,24 @@
-"""Older training script for training of the ECD/QFormer slt system"""
+"""Main training script for the encoder -> connector -> decoder-only LM architecture """
 import sys
 
 from transformers import (
     AutoFeatureExtractor,
+    AutoModelForCausalLM,
     AutoTokenizer,
     GenerationConfig,
     HfArgumentParser,
     Seq2SeqTrainer,
-    Speech2TextConfig,
-    Speech2TextFeatureExtractor,
-    Speech2TextForConditionalGeneration,
-    TrainerCallback,
-    MarianConfig,
-    MarianMTModel,
-    MarianForCausalLM,
     Blip2QFormerConfig,
-    WhisperFeatureExtractor,
     WhisperForConditionalGeneration,
-    WhisperProcessor,
+    BitsAndBytesConfig,
 )
 from transformers.utils import logging
+import torch
 
 from utilities.callbacks import init_callbacks
-from utilities.collators import SpeechMTCollatorWithPadding, SpeechCollatorWithPadding
+from utilities.collators import SpeechAlignedCollatorWithPadding
 from utilities.data_utils import get_dataset
-from utilities.eval_utils import compute_metrics_translation
+from utilities.eval_utils import compute_metrics
 from utilities.model_utils import average_checkpoints as average_checkpoints
 from utilities.general_utils import do_evaluate, do_generate
 from utilities.training_arguments import (
@@ -35,9 +29,11 @@ from utilities.training_arguments import (
     ConnectorArguments
 )
 
-from models.old_alignment import AlignmentConfig, ApmoModel
-from models.ctc_encoder_plus_autoregressive_decoder import JointCTCAttentionEncoderDecoder
+from models.old_alignment import AlignmentConfig
+from models.aligned_decoder_lm import SpeechEncoderConnectorLMDecoder
 from utilities.training_utils import AdditionalLossTrackerTrainer
+
+from peft import LoraConfig, get_peft_model, replace_lora_weights_loftq
 
 
 if __name__ == "__main__":
@@ -72,10 +68,6 @@ if __name__ == "__main__":
         reshuffle_at_start=data_args.reshuffle_at_start,
     )
 
-    # for eval purposes #FIXME
-    dataset['val'] = dataset['val'].filter(lambda x: x['length'] > data_args.min_duration_in_seconds and x['length'] < data_args.max_duration_in_seconds)
-    dataset['dev5'] = dataset['dev5'].filter(lambda x: x['length'] > data_args.min_duration_in_seconds and x['length'] < data_args.max_duration_in_seconds)
-
     logger.info(f"Dataset processed successfully.{dataset}")
 
     if training_args.preprocess_dataset_only:
@@ -84,40 +76,54 @@ if __name__ == "__main__":
 
     # 2. Create feature extractor and tokenizer
     feature_extractor = AutoFeatureExtractor.from_pretrained(training_args.feature_extractor_name)
-    tokenizer_target = AutoTokenizer.from_pretrained(training_args.tokenizer_name)
-    tokenizer_source = AutoTokenizer.from_pretrained(training_args.tokenizer_name.replace('pt', 'en'))
+    tokenizer = AutoTokenizer.from_pretrained(
+        training_args.tokenizer_name,
+        add_eos_token = True,
+    )
+
+    tokenizer.pad_token_id = tokenizer.eos_token_id
 
     # 3. Instantiate model
-    if 's2t' in model_args.base_encoder_model:
-        encoder = Speech2TextForConditionalGeneration.from_pretrained(model_args.base_encoder_model)
-        d_model = encoder.config.d_model
-    elif 'whisper' in model_args.base_encoder_model:
-        encoder = WhisperForConditionalGeneration.from_pretrained(model_args.base_encoder_model)
-        d_model = encoder.config.d_model
-    else:
-        encoder = JointCTCAttentionEncoderDecoder.from_pretrained(model_args.base_encoder_model)
-        d_model = encoder.config.encoder.hidden_size
+    # -- load the asr encoder
+    encoder = WhisperForConditionalGeneration.from_pretrained(model_args.base_encoder_model)
+    d_model = encoder.config.d_model
 
-    decoder = MarianMTModel.from_pretrained(model_args.base_decoder_model)
+    # load and quantize the LLM
+    quantization_config = BitsAndBytesConfig(
+        load_in_4bit=True,
+        bnb_4bit_use_double_quant=True,
+        bnb_4bit_quant_type='nf4',
+        bnb_4bit_compute_dtype=torch.bfloat16,
+        bnb_4bit_quant_storage=torch.bfloat16,
+    )
 
+    # TODO: freeze decoder?
+    decoder = AutoModelForCausalLM.from_pretrained(
+        model_args.base_decoder_model,
+        quantization_config=quantization_config,
+        torch_dtype=torch.bfloat16,
+    )
+
+    # set up lora for the decoder
+    if qformer_args.decoder_lora:
+        lora_config = LoraConfig(task_type='CAUSAL_LM', target_modules='all-linear')
+        decoder = get_peft_model(decoder, lora_config)
+        replace_lora_weights_loftq(decoder)
+
+    # -- prepare the connector
     if model_args.from_config:
         apmo_config = AlignmentConfig.from_pretrained(model_args.from_config)
     else:
 
         qformer_config = Blip2QFormerConfig(
-                hidden_size=256,
+                hidden_size=qformer_args.conn_hidden_size,
                 num_hidden_layers=qformer_args.conn_layers,
-                num_attention_heads=4,
-                intermediate_size=2048,
+                num_attention_heads=qformer_args.conn_attn_heads,
+                intermediate_size=qformer_args.qf_intermediate_size,
                 hidden_act='gelu_new',
                 cross_attention_frequency=1,
-                encoder_hidden_size=d_model,
+                encoder_hidden_size=d_model
             )
-
-        if qformer_args.qf_config_overrides is not None:
-            logger.info(f"Overriding config: {qformer_args.qf_config_overrides}")
-            parsed_dict = dict(x.split("=") for x in qformer_args.qf_config_overrides.split(","))
-            qformer_config.update(parsed_dict)
 
         apmo_config = AlignmentConfig(
                 encoder_config=encoder.config,
@@ -126,8 +132,7 @@ if __name__ == "__main__":
                 num_query_tokens=qformer_args.n_queries,
                 mm_pooling=qformer_args.qf_mm_pooling,
                 mm_loss_weight=qformer_args.qf_mm_loss_weight,
-                mm_micro_loss=qformer_args.qf_mm_micro_loss,
-                num_pretrain_epochs=training_args.qf_pretrain_epochs,
+                connector_type=qformer_args.connector_type,
             )
 
     if model_args.from_pretrained:
@@ -136,57 +141,72 @@ if __name__ == "__main__":
             model_path = average_checkpoints(model_path)
 
         config = AlignmentConfig.from_pretrained(model_path)
-        model = ApmoModel.from_pretrained(model_path, config, encoder, decoder)
         logger.info(f"Loading model from pretrained checkpoint...")
+        
+        model = SpeechEncoderConnectorLMDecoder.from_pretrained(model_path, config, encoder, decoder)
+
     else:
-        model = ApmoModel(encoder=encoder, decoder=decoder, config=apmo_config)
+        model = SpeechEncoderConnectorLMDecoder(encoder=encoder, decoder=decoder, config=apmo_config, freeze_decoder= not qformer_args.decoder_lora)
 
     logger.info(f"Finished loading model {model}")
 
     # 4. Update generation config
+    bos = decoder.config.decoder_start_token_id if tokenizer.bos_token_id is None else tokenizer.bos_token_id
     gen_config = GenerationConfig(
-        bos_token_id=tokenizer_target.bos_token_id,
-        pad_token_id=tokenizer_target.pad_token_id,
-        decoder_start_token_id=tokenizer_target.bos_token_id,
-        decoder_end_token_id=tokenizer_target.eos_token_id,
+        bos_token_id=bos,
+        pad_token_id=tokenizer.pad_token_id,
+        decoder_start_token_id=bos,
+        decoder_end_token_id=tokenizer.eos_token_id,
         length_penalty=gen_args.length_penalty,
         early_stopping=gen_args.early_stopping,
-        eos_token_id=tokenizer_target.eos_token_id,
-        max_length=gen_args.max_length,
+        eos_token_id=tokenizer.eos_token_id,
+        #max_length=gen_args.max_length if gen_args.max_new_tokens is None else None,
         num_beams=gen_args.num_beams,
+        max_new_tokens=gen_args.max_new_tokens,
     )
+
     logger.info(f"Model updating generation config:\n {str(gen_config)}")
-    training_args.generation_max_length = gen_args.max_length
+    #training_args.generation_max_length = gen_args.max_length
     training_args.generation_num_beams = gen_args.num_beams
     model.generation_config = gen_config
     model.decoder.generation_config = gen_config
+    if hasattr(model.decoder, 'decoder'):
+        model.decoder.decoder.generation_config = gen_config
+
 
     # 5. Initialize callbacks
     callbacks = init_callbacks(data_args, training_args, dataset, feature_extractor)
 
     # 6. Initialize data collator
-    data_collator = SpeechMTCollatorWithPadding(
+    data_collator = SpeechAlignedCollatorWithPadding(
         feature_extractor=feature_extractor,
-        tokenizer_source=tokenizer_source,
-        tokenizer_target=tokenizer_target,
+        tokenizer_source=tokenizer,
+        tokenizer_target=tokenizer,
         padding=True,
         sampling_rate=data_args.sampling_rate,
         audio_path=data_args.audio_column_name,
-        target_text_path='translation',
-        source_text_path='transcription',
+        text_path=data_args.text_column_name,
         model_input_name=model.main_input_name,
-        )
+        prompt_prefix=qformer_args.prompt_prefix,
+        prompt_suffix=qformer_args.prompt_suffix,
+    )
+
+    if gen_args.no_metrics:
+        # bypasses decoding in the eval loop, speeding up the evaluation significantly. We only
+        # get the eval loss this way as a metric
+        c_metrics = None
+    else:
+        c_metrics = lambda pred: compute_metrics(tokenizer, pred, gen_args.wandb_predictions_to_save) 
 
     # 7. Initialize trainer
-    trainer_class = AdditionalLossTrackerTrainer if qformer_args.qf_mm_loss_weight > 0 else Seq2SeqTrainer
-    trainer = trainer_class(
+    trainer = Seq2SeqTrainer(
             args=training_args,
             model=model,
             callbacks=callbacks,
             train_dataset=dataset[data_args.train_split],
             eval_dataset=training_eval_dataset,
             data_collator=data_collator,
-            compute_metrics=lambda pred: compute_metrics_translation(tokenizer_target, pred, gen_args.wandb_predictions_to_save),
+            compute_metrics=c_metrics,
     )
 
     # 8. Train model
@@ -199,7 +219,7 @@ if __name__ == "__main__":
             trainer=trainer,
             dataset=dataset,
             model=model,
-            tokenizer=tokenizer_target,
+            tokenizer=tokenizer,
             gen_args=gen_args,
             training_args=training_args,
             data_args=data_args,
@@ -210,7 +230,7 @@ if __name__ == "__main__":
             trainer=trainer,
             dataset=dataset,
             model=model,
-            tokenizer=tokenizer_target,
+            tokenizer=tokenizer,
             gen_args=gen_args,
             data_args=data_args,
             gen_config=gen_config,

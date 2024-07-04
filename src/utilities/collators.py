@@ -357,7 +357,8 @@ class SpeechAlignedCollatorWithPadding:
     audio_path: Optional[str] = None
     text_path: Optional[str] = None
     model_input_name: Optional[str] = None
-    encoder_prompt_prefix: Optional[str] = None
+    prompt_prefix: Optional[str] = None
+    prompt_suffix: Optional[str] = None
 
     def __call__(
         self, features: List[Dict[str, Union[List[int], torch.Tensor, Dict[str, BatchFeature]]]]
@@ -376,19 +377,47 @@ class SpeechAlignedCollatorWithPadding:
             return_tensors="pt",
         )
 
-        if self.encoder_prompt_prefix is not None:
-            source_text_ids = self.tokenizer_source.batch_encode_plus(
-                [self.encoder_prompt_prefix for _ in features],
+        # cut off the bos token
+        if labels['input_ids'][0, 0] == self.tokenizer_target.bos_token_id:
+            labels['input_ids'] = labels['input_ids'][:,1:]
+            labels['attention_mask'] = labels['attention_mask'][:,1:]
+
+        if self.prompt_prefix is not None:
+            prompt_prefix_ids = self.tokenizer_source.batch_encode_plus(
+                [self.prompt_prefix for _ in features],
                 return_attention_mask=True,
                 padding="longest",
                 return_tensors="pt",
             )
 
-            source_text_ids['input_ids'] = source_text_ids['input_ids'][:,:-1]
-            source_text_ids['attention_mask'] = source_text_ids['attention_mask'][:,:-1]
+            # cut off the prefix eos token id
+            if prompt_prefix_ids['input_ids'][0, -1] == self.tokenizer_source.eos_token_id:
+                prompt_prefix_ids['input_ids'] = prompt_prefix_ids['input_ids'][:,:-1]
+                prompt_prefix_ids['attention_mask'] = prompt_prefix_ids['attention_mask'][:,:-1]
 
         else:
-            source_text_ids = None
+            prompt_prefix_ids = None
+
+        if self.prompt_suffix is not None:
+            prompt_suffix_ids = self.tokenizer_source.batch_encode_plus(
+                [self.prompt_prefix for _ in features],
+                return_attention_mask=True,
+                padding="longest",
+                return_tensors="pt",
+            )
+
+            # cut off the bos token
+            if prompt_suffix_ids['input_ids'][0, 0] == self.tokenizer_target.bos_token_id:
+                prompt_suffix_ids['input_ids'] = prompt_suffix_ids['input_ids'][:,1:]
+                prompt_suffix_ids['attention_mask'] = prompt_suffix_ids['attention_mask'][:,1:]
+
+            # cut off the eos token
+            if prompt_suffix_ids['input_ids'][0, -1] == self.tokenizer_target.eos_token_id:
+                prompt_suffix_ids['input_ids'] = prompt_suffix_ids['input_ids'][:,:-1]
+                prompt_suffix_ids['attention_mask'] = prompt_suffix_ids['attention_mask'][:,:-1]
+
+        else:
+            prompt_suffix_ids = None
 
         batch = self.feature_extractor.pad(
             input_features,
@@ -396,6 +425,7 @@ class SpeechAlignedCollatorWithPadding:
             max_length=self.max_length,
             pad_to_multiple_of=self.pad_to_multiple_of,
             return_tensors="pt",
+            return_attention_mask=True,
         )
 
         if isinstance(self.feature_extractor, WhisperFeatureExtractor):
@@ -405,9 +435,14 @@ class SpeechAlignedCollatorWithPadding:
 
         labels = labels["input_ids"].masked_fill(labels.attention_mask.ne(1), -100)
         batch["labels"] = labels
-        if source_text_ids is not None:
-            batch["encoder_prefix_ids"] = source_text_ids['input_ids']
-            batch["encoder_prefix_mask"] = source_text_ids['attention_mask']
+
+        if prompt_prefix_ids is not None:
+            batch["prompt_prefix_ids"] = prompt_prefix_ids['input_ids']
+            batch["prompt_prefix_mask"] = prompt_prefix_ids['attention_mask']
+
+        if prompt_suffix_ids is not None:
+            batch["prompt_suffix_ids"] = prompt_suffix_ids['input_ids']
+            batch["prompt_suffix_mask"] = prompt_suffix_ids['attention_mask']
 
         if self.model_input_name != self.feature_extractor.model_input_names[0]:
             batch[self.model_input_name] = batch[self.feature_extractor.model_input_names[0]]
@@ -458,7 +493,7 @@ class MultiTokMTCollatorWithPadding:
     source_text_path: Optional[str] = None
     target_text_path: Optional[str] = None
     model_input_name: Optional[str] = None
-    encoder_prompt_prefix: Optional[str] = None
+    prompt_prefix: Optional[str] = None
 
     def __call__(
         self, features: List[Dict[str, Union[List[int], torch.Tensor, Dict[str, BatchFeature]]]]

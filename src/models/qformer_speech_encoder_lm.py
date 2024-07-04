@@ -188,8 +188,13 @@ class SpeechQFormerEncoderDecoder(PreTrainedModel):
 
         if labels is not None:
             if decoder_input_ids is None and decoder_inputs_embeds is None:
+                if self.decoder.config.model_type == 'llama':
+                    sep = 29871
+                else:
+                    sep = self.config.decoder_bos_token_id
+
                 decoder_input_ids = shift_tokens_right(
-                    labels, self.config.decoder_pad_token_id, self.config.decoder_bos_token_id
+                    labels, self.config.decoder_pad_token_id, sep
                 )
 
         # 1. forward the audio through the encoder

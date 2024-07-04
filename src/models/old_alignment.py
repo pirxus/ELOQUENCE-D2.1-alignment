@@ -60,12 +60,12 @@ class SpeechQFormerMarianOutput(ModelOutput):
     language_model_outputs: Optional[Tuple[torch.FloatTensor]] = None
 
 
-class  ApmoConfig(PretrainedConfig):
+class  AlignmentConfig(PretrainedConfig):
     def __init__(
             self,
             encoder_config=None,
             qformer_config=None,
-            bridge_type='qformer',
+            connector_type='qformer',
             lm_config=None,
             num_query_tokens=80,
             modality_matching=True,
@@ -91,18 +91,18 @@ class  ApmoConfig(PretrainedConfig):
         self.ce_loss_weight = ce_loss_weight
         self.num_pretrain_epochs = num_pretrain_epochs
         self.mm_micro_loss = mm_micro_loss
-        self.bridge_type = bridge_type
+        self.connector_type = connector_type
 
         super().__init__(**kwargs)
 
 class ApmoModel(PreTrainedModel):
-    config_class = ApmoConfig
+    config_class = AlignmentConfig
     main_input_name = "input_features"
 
     def __init__(
             self,
             pretrained_path: Optional[str] = None,
-            config: Optional[ApmoConfig] = None,
+            config: Optional[AlignmentConfig] = None,
             encoder: Optional[PreTrainedModel] = None,
             decoder: Optional[PreTrainedModel] = None,
         ):
@@ -469,12 +469,12 @@ class ApmoModel(PreTrainedModel):
         return decoder_output
 
 class S2TEncoderMarianDecoder(PreTrainedModel):
-    config_class = ApmoConfig
+    config_class = AlignmentConfig
     main_input_name = "input_features"
 
     def __init__(
             self,
-            config: Optional[ApmoConfig] = None,
+            config: Optional[AlignmentConfig] = None,
             encoder: Optional[PreTrainedModel] = None,
             decoder: Optional[PreTrainedModel] = None,
         ):
@@ -623,13 +623,13 @@ class S2TEncoderMarianDecoder(PreTrainedModel):
         return decoder_output
 
 class SpeechEncoderMarianEncoderDecoder(PreTrainedModel):
-    config_class = ApmoConfig
+    config_class = AlignmentConfig
     main_input_name = "input_features"
 
     def __init__(
             self,
             model_path: Optional[str] = None,
-            config: Optional[ApmoConfig] = None,
+            config: Optional[AlignmentConfig] = None,
             encoder: Optional[PreTrainedModel] = None,
             decoder: Optional[PreTrainedModel] = None,
         ):
@@ -806,13 +806,13 @@ class SpeechEncoderMarianEncoderDecoder(PreTrainedModel):
 
 
 class SpeechEncoderConvMarianEncoderDecoder(PreTrainedModel):
-    config_class = ApmoConfig
+    config_class = AlignmentConfig
     main_input_name = "input_features"
 
     def __init__(
             self,
             model_path: Optional[str] = None,
-            config: Optional[ApmoConfig] = None,
+            config: Optional[AlignmentConfig] = None,
             encoder: Optional[PreTrainedModel] = None,
             decoder: Optional[PreTrainedModel] = None,
             freeze_decoder: Optional[bool] = True,
@@ -849,7 +849,7 @@ class SpeechEncoderConvMarianEncoderDecoder(PreTrainedModel):
             "encoder_ffn_dim": q_conf.intermediate_size,
         })
 
-        self.bridge = MarianEncoder(marian_config)
+        self.connector = MarianEncoder(marian_config)
 
         # freeze encoder
         for _, param in self.encoder.named_parameters():
@@ -941,7 +941,7 @@ class SpeechEncoderConvMarianEncoderDecoder(PreTrainedModel):
             audio_attention_mask = None
 
         # pass the encoder outputs through the bridge network
-        bridge_outputs = self.bridge(
+        connector_outputs = self.connector(
                 attention_mask=audio_attention_mask,
                 inputs_embeds=encoder_outputs.last_hidden_state,
                 return_dict=True,
@@ -949,7 +949,7 @@ class SpeechEncoderConvMarianEncoderDecoder(PreTrainedModel):
 
         decoder_output = self.decoder(
             input_ids=None,
-            inputs_embeds=bridge_outputs.last_hidden_state,
+            inputs_embeds=connector_outputs.last_hidden_state,
             attention_mask=audio_attention_mask,
             decoder_input_ids=decoder_input_ids, # input_ids
             decoder_attention_mask=decoder_attention_mask,
@@ -1010,7 +1010,7 @@ class SpeechEncoderConvMarianEncoderDecoder(PreTrainedModel):
             audio_attention_mask = None
 
         # pass the encoder outputs through the bridge network
-        bridge_outputs = self.bridge(
+        connector_outputs = self.connector(
                 attention_mask=audio_attention_mask,
                 inputs_embeds=audio_embeds,
                 return_dict=True,
@@ -1018,7 +1018,7 @@ class SpeechEncoderConvMarianEncoderDecoder(PreTrainedModel):
 
         decoder_output = self.decoder.generate(
             input_ids=None, # input_ids
-            inputs_embeds=bridge_outputs.last_hidden_state,
+            inputs_embeds=connector_outputs.last_hidden_state,
             attention_mask=audio_attention_mask,
             **generate_kwargs,
         )

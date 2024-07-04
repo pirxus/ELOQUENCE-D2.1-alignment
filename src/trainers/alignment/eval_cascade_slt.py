@@ -29,10 +29,10 @@ from utilities.training_arguments import (
     GeneralTrainingArguments,
     GenerationArguments,
     ModelArguments,
-    QFormerArguments
+    ConnectorArguments
 )
 
-from models.old_alignment import ApmoConfig, S2TEncoderMarianDecoder
+from models.old_alignment import AlignmentConfig, S2TEncoderMarianDecoder
 from models.cascade_slt import CascadeSLTModel, CascadeSLTModelConfig
 from models.ctc_encoder_plus_autoregressive_decoder import JointCTCAttentionEncoderDecoder
 from utilities.training_utils import AdditionalLossTrackerTrainer
@@ -41,7 +41,7 @@ from utilities.training_utils import AdditionalLossTrackerTrainer
 if __name__ == "__main__":
     logging.set_verbosity_debug()
     logger = logging.get_logger("transformers")
-    parser = HfArgumentParser((ModelArguments, DataTrainingArguments, GeneralTrainingArguments, GenerationArguments, QFormerArguments))
+    parser = HfArgumentParser((ModelArguments, DataTrainingArguments, GeneralTrainingArguments, GenerationArguments, ConnectorArguments))
 
     model_args, data_args, training_args, gen_args, qformer_args = parser.parse_args_into_dataclasses()
 

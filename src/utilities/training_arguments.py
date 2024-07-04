@@ -127,6 +127,7 @@ class GenerationArguments:
     """General generation arguments."""
     num_beams: Optional[int] = field(default=1, metadata={"help": "Num beams for decoding."})
     max_length: Optional[int] = field(default=200, metadata={"help": "Max number of generated tokens."})
+    max_new_tokens: Optional[int] = field(default=200, metadata={"help": "Max number of tokens generated after the prompt for decoder-only models."})
     length_penalty: Optional[float] = field(default=1.0, metadata={"help": "Length penalty for generation."})
     early_stopping: Optional[Union[str, bool]] = field(
         default=False, metadata={"help": "Whether to use early stopping."}
@@ -156,6 +157,7 @@ class GenerationArguments:
         default=None,
         metadata={"help": "Arguments to override for evaluation. Example: " "decoding_ctc_weight=0.3;lm_model=gpt2"},
     )
+    no_metrics: Optional[bool] = field(default=False, metadata={"help": "Disables generation and metric computation in the evaluate loop. Useful for speeding up the evaluation."})
 
 
 @dataclass
@@ -287,17 +289,19 @@ class TokenizerTrainingArguments:
     unk_token: Optional[str] = field(default="<unk>", metadata={"help": "UNK token"})
 
 @dataclass
-class QFormerArguments:
+class ConnectorArguments:
     _argument_group_name = "QFormer alignment model arguments"
     qformer_config: Optional[str] = field(
         default=None, metadata={"help": "Path to pretrained qformer model/config or model/config identifier from huggingface.co/models"}
     )
-    bridge_type: Optional[str] = field(default='qformer', metadata={"help": "Architecture of the bridge network (qformer, conv)."})
-    encoder_prompt_prefix: Optional[str] = field(default=None, metadata={"help": "Encoder prompt prefix for instruction-tuned models such as T5."})
+    connector_type: Optional[str] = field(default='qformer', metadata={"help": "Architecture of the bridge network (qformer, conv)."})
+    prompt_prefix: Optional[str] = field(default=None, metadata={"help": "Text prompt prefix to the connector output soft prompt."})
+    prompt_suffix: Optional[str] = field(default=None, metadata={"help": "Text prompt suffix to the connector output soft prompt."})
+    decoder_lora: Optional[bool] = field(default=False, metadata={"help": "Whether to use LoRA for the decoder LM."})
     n_queries: Optional[int] = field(default=80, metadata={"help": "Number of qformer queries."})
-    qf_n_layers: Optional[int] = field(default=6, metadata={"help": "Number of qformer layers."})
-    qf_hidden_size: Optional[int] = field(default=256, metadata={"help": "Qformer hidden dimension."})
-    qf_n_attn_heads: Optional[int] = field(default=6, metadata={"help": "Number of qformer heads."})
+    conn_layers: Optional[int] = field(default=6, metadata={"help": "Number of qformer layers."})
+    conn_hidden_size: Optional[int] = field(default=256, metadata={"help": "Qformer hidden dimension."})
+    conn_attn_heads: Optional[int] = field(default=6, metadata={"help": "Number of qformer heads."})
     qf_intermediate_size: Optional[int] = field(default=2048, metadata={"help": "Qformer intermediate layer dimension."})
     qf_mm_pooling: Optional[str] = field(default=None, metadata={"help": "Modality-matching loss pooling method."})
     qf_mm_micro_loss: Optional[str] = field(default='dot', metadata={"help": "Modality-matching micro loss function."})

@@ -7,39 +7,30 @@ Author: Simon Sedlacek
 """
 
 from transformers import (
-
-    BertModel,
     PreTrainedModel,
-    PretrainedConfig,
     Blip2QFormerConfig,
     Blip2QFormerModel,
-    Speech2TextModel,
-    MarianMTModel,
-    MarianForCausalLM,
     MarianConfig,
 )
-from transformers.modeling_outputs import Seq2SeqLMOutput, BaseModelOutput, ModelOutput
+from transformers.modeling_outputs import BaseModelOutput
 from transformers.models.marian.modeling_marian import MarianEncoder
-from tslearn.metrics import SoftDTWLossPyTorch
 
 from typing import Optional, Tuple, Union
-from dataclasses import dataclass
 
 import torch
 from torch import nn
 import torch.nn.functional as F
-from copy import deepcopy
 
 from models.utils import SpeechEncoderOutputSubsampler, shift_tokens_right
 
-from models.old_alignment import SpeechQFormerMarianOutput, ApmoConfig
+from models.old_alignment import SpeechQFormerMarianOutput, AlignmentConfig
 
 class AlignmentNetwork(PreTrainedModel):
-    config_class = ApmoConfig
+    config_class = AlignmentConfig
 
     def __init__(
             self,
-            config: Optional[ApmoConfig] = None,
+            config: AlignmentConfig,
             model_type: Optional[str] = 'qformer'
         ):
         super().__init__(config)
@@ -63,18 +54,36 @@ class AlignmentNetwork(PreTrainedModel):
                     torch.zeros(1, config.num_query_tokens, config.qformer_config.hidden_size)
                 )
 
-            self.qformer = Blip2QFormerModel(self.config.qformer_config)
+            self.qformer = Blip2QFormerModel(config.qformer_config)
             self.forward = self._forward_qformer
+
+        elif self.model_type == 'linear':
+
+            conv_config = SpeechEncoderOutputSubsampler.default_config
+            conv_config.update({
+                'input_feat_per_channel': config.qformer_config.encoder_hidden_size,
+                'd_model': config.qformer_config.hidden_size,
+                })
+            self.conv = SpeechEncoderOutputSubsampler(conv_config)
+
+            self.fc = nn.Linear(config.qformer_config.hidden_size, config.qformer_config.hidden_size)
+            self.forward = self._forward_linear
+
+        elif self.model_type == 'linear_stacked':
+            # stack
+
+            self.fc = nn.Linear(config.qformer_config.encoder_hidden_size * 4, config.qformer_config.hidden_size)
+            self.forward = self._forward_linear_stacked
 
         else:
             conv_config = SpeechEncoderOutputSubsampler.default_config
             conv_config.update({
-                'input_feat_per_channel': self.config.qformer_config.encoder_hidden_size,
-                'd_model': self.config.qformer_config.hidden_size,
+                'input_feat_per_channel': config.qformer_config.encoder_hidden_size,
+                'd_model': config.qformer_config.hidden_size,
                 })
             self.conv = SpeechEncoderOutputSubsampler(conv_config)
 
-            q_conf = self.config.qformer_config
+            q_conf = config.qformer_config
             marian_config = MarianConfig(
                     d_model=q_conf.hidden_size,
                     encoder_layers=q_conf.num_hidden_layers,
@@ -89,9 +98,9 @@ class AlignmentNetwork(PreTrainedModel):
                     scale_embedding=True,
                     )
 
-            self.bridge = MarianEncoder(marian_config)
-            self.bridge.embed_tokens.weight.requires_grad = False
-            self.forward = self._forward_conv
+            self.connector = MarianEncoder(marian_config)
+            self.connector.embed_tokens.weight.requires_grad = False
+            self.forward = self._forward_ste
 
     def _forward_qformer(
             self,
@@ -120,7 +129,7 @@ class AlignmentNetwork(PreTrainedModel):
 
         return query_output, None
 
-    def _forward_conv(
+    def _forward_linear(
             self,
             encoder_outputs,
             attention_mask,
@@ -145,24 +154,103 @@ class AlignmentNetwork(PreTrainedModel):
             attention_mask = None
 
         # pass the encoder outputs through the bridge network
-        bridge_outputs = self.bridge(
+        fc_out = F.gelu(self.fc(audio_embeds))
+
+        connector_outputs = BaseModelOutput(
+                last_hidden_state = self.language_projection(fc_out)
+            )
+
+        return connector_outputs, attention_mask
+
+    def _forward_linear_stacked(
+            self,
+            encoder_outputs,
+            attention_mask,
+        ):
+
+        if not isinstance(encoder_outputs, BaseModelOutput):
+            encoder_outputs = BaseModelOutput(last_hidden_state=encoder_outputs)
+
+        audio_embeds = encoder_outputs.last_hidden_state
+
+        # Downsample the speech encoder outputs 
+        mod = audio_embeds.shape[-2] % 4
+        if mod != 0:
+            # append zeros to both the embeddings and the mask if the sequences are not divisible
+            # by four
+            appendix = torch.zeros((audio_embeds.shape[0], mod, audio_embeds.shape[-1]))
+            audio_embeds = torch.hstack((audio_embeds, appendix))
+
+            if attention_mask is not None:
+                mask_appendix = attention_mask[...,-1].unsqueeze(1).repeat(1, mod)
+                attention_mask = torch.cat((attention_mask, mask_appendix), dim=1)
+
+        emb_a = audio_embeds[...,0::4,:]
+        emb_b = audio_embeds[...,1::4,:]
+        emb_c = audio_embeds[...,2::4,:]
+        emb_d = audio_embeds[...,3::4,:]
+        audio_embeds = torch.cat((emb_a, emb_b, emb_c, emb_d), dim=-1)
+
+        # downsample the attention mask too
+        if attention_mask is not None:
+            # NOTE: here we're just taking the first mask element for
+            # each group index, maybe not ideal?
+            attention_mask = attention_mask[:,::4]
+        else:
+            attention_mask = None
+
+        # pass the encoder outputs through the bridge network
+        fc_out = F.gelu(self.fc(audio_embeds))
+
+        connector_outputs = BaseModelOutput(
+                last_hidden_state = self.language_projection(fc_out)
+            )
+
+        return connector_outputs, attention_mask
+
+    def _forward_ste(
+            self,
+            encoder_outputs,
+            attention_mask,
+        ):
+
+        if not isinstance(encoder_outputs, BaseModelOutput):
+            encoder_outputs = BaseModelOutput(
+                    last_hidden_state=encoder_outputs,
+                )
+
+        audio_embeds = encoder_outputs.last_hidden_state
+
+        # Downsample the speech encoder outputs 
+        audio_embeds = self.conv(audio_embeds)
+
+        # downsample encoder attention mask again..
+        if attention_mask is not None:
+            attention_mask = self.conv._get_feature_vector_attention_mask(
+                audio_embeds.shape[1], attention_mask
+            )
+        else:
+            attention_mask = None
+
+        # pass the encoder outputs through the bridge network
+        connector_outputs = self.connector(
                 attention_mask=attention_mask,
                 inputs_embeds=audio_embeds,
                 return_dict=True,
         )
 
-        bridge_outputs.last_hidden_state = self.language_projection(bridge_outputs.last_hidden_state)
+        connector_outputs.last_hidden_state = self.language_projection(connector_outputs.last_hidden_state)
 
-        return bridge_outputs, attention_mask
+        return connector_outputs, attention_mask
 
 class SpeechEncoderBridgeTextDecoder(PreTrainedModel):
-    config_class = ApmoConfig
+    config_class = AlignmentConfig
     main_input_name = "input_features"
 
     def __init__(
             self,
             model_path: Optional[str] = None,
-            config: Optional[ApmoConfig] = None,
+            config: Optional[AlignmentConfig] = None,
             encoder: Optional[PreTrainedModel] = None,
             decoder: Optional[PreTrainedModel] = None,
             freeze_decoder: Optional[bool] = True,
@@ -188,7 +276,7 @@ class SpeechEncoderBridgeTextDecoder(PreTrainedModel):
         if isinstance(config.lm_config, dict):
             config.lm_config = PretrainedConfig(**config.lm_config)
 
-        self.bridge = AlignmentNetwork(config=self.config, model_type=self.config.bridge_type)
+        self.connector = AlignmentNetwork(config=self.config, model_type=self.config.connector_type)
 
         # freeze encoder
         for _, param in self.encoder.named_parameters():
@@ -225,8 +313,8 @@ class SpeechEncoderBridgeTextDecoder(PreTrainedModel):
         self,
         input_features: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
-        encoder_prefix_ids: Optional[torch.LongTensor] = None,
-        encoder_prefix_mask: Optional[torch.LongTensor] = None,
+        prompt_prefix_ids: Optional[torch.LongTensor] = None,
+        prompt_prefix_mask: Optional[torch.LongTensor] = None,
         decoder_input_ids: Optional[torch.LongTensor] = None,
         decoder_attention_mask: Optional[torch.LongTensor] = None,
         head_mask: Optional[torch.Tensor] = None,
@@ -274,22 +362,22 @@ class SpeechEncoderBridgeTextDecoder(PreTrainedModel):
             audio_attention_mask = None
 
         # pass the encoder outputs through the bridge network
-        bridge_outputs, audio_attention_mask = self.bridge(
+        connector_outputs, audio_attention_mask = self.connector(
                 encoder_outputs=encoder_outputs.last_hidden_state,
                 attention_mask=audio_attention_mask,
             )
 
         # combine the bridge outputs with the encoder prefix ids
         """
-        if encoder_prefix_ids is not None:
+        if prompt_prefix_ids is not None:
 
             # embed the prefix ids
             emb = self.decoder.get_encoder().get_input_embeddings()
-            prefix_embeds = emb(encoder_prefix_ids)
+            prefix_embeds = emb(prompt_prefix_ids)
 
-            bridge_outputs.last_hidden_state = torch.hstack((prefix_embeds, bridge_outputs.last_hidden_state))
+            connector_outputs.last_hidden_state = torch.hstack((prefix_embeds, connector_outputs.last_hidden_state))
             if audio_attention_mask is not None:
-                audio_attention_mask = torch.hstack((encoder_prefix_mask, audio_attention_mask))
+                audio_attention_mask = torch.hstack((prompt_prefix_mask, audio_attention_mask))
         """
 
         decoder_output = self.decoder(
@@ -298,7 +386,7 @@ class SpeechEncoderBridgeTextDecoder(PreTrainedModel):
             attention_mask=audio_attention_mask,
             decoder_input_ids=decoder_input_ids, # input_ids
             decoder_attention_mask=decoder_attention_mask,
-            encoder_outputs=bridge_outputs,
+            encoder_outputs=connector_outputs,
             past_key_values=past_key_values,
             labels=labels,
             use_cache=use_cache,
@@ -313,8 +401,8 @@ class SpeechEncoderBridgeTextDecoder(PreTrainedModel):
     def generate(
         self,
         input_features: torch.FloatTensor,
-        encoder_prefix_ids: Optional[torch.LongTensor] = None,
-        encoder_prefix_mask: Optional[torch.LongTensor] = None,
+        prompt_prefix_ids: Optional[torch.LongTensor] = None,
+        prompt_prefix_mask: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.LongTensor] = None,
         **generate_kwargs,
     ) -> torch.LongTensor:
@@ -344,7 +432,7 @@ class SpeechEncoderBridgeTextDecoder(PreTrainedModel):
             audio_attention_mask = None
 
         # pass the encoder outputs through the bridge network
-        bridge_outputs, audio_attention_mask = self.bridge(
+        connector_outputs, audio_attention_mask = self.connector(
                 encoder_outputs=audio_embeds,
                 attention_mask=audio_attention_mask,
             )
@@ -359,7 +447,7 @@ class SpeechEncoderBridgeTextDecoder(PreTrainedModel):
         decoder_output = self.decoder.generate(
             input_ids=None, # input_ids
             attention_mask=audio_attention_mask,
-            encoder_outputs=bridge_outputs,
+            encoder_outputs=connector_outputs,
             decoder_input_ids=decoder_input,
             decoder_attention_mask=attention_mask,
             generation_config=self.generation_config,
@@ -369,13 +457,13 @@ class SpeechEncoderBridgeTextDecoder(PreTrainedModel):
 
 
 class SpeechEncoderBridgeMarianEncoderDecoder(PreTrainedModel):
-    config_class = ApmoConfig
+    config_class = AlignmentConfig
     main_input_name = "input_features"
 
     def __init__(
             self,
             model_path: Optional[str] = None,
-            config: Optional[ApmoConfig] = None,
+            config: Optional[AlignmentConfig] = None,
             encoder: Optional[PreTrainedModel] = None,
             decoder: Optional[PreTrainedModel] = None,
             freeze_decoder: Optional[bool] = True,
@@ -401,7 +489,7 @@ class SpeechEncoderBridgeMarianEncoderDecoder(PreTrainedModel):
         if isinstance(config.lm_config, dict):
             config.lm_config = PretrainedConfig(**config.lm_config)
 
-        self.bridge = AlignmentNetwork(config=self.config, model_type=self.config.bridge_type)
+        self.connector = AlignmentNetwork(config=self.config, model_type=self.config.connector_type)
 
         # freeze encoder
         for _, param in self.encoder.named_parameters():
@@ -448,8 +536,8 @@ class SpeechEncoderBridgeMarianEncoderDecoder(PreTrainedModel):
         self,
         input_features: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
-        encoder_prefix_ids: Optional[torch.LongTensor] = None,
-        encoder_prefix_mask: Optional[torch.LongTensor] = None,
+        prompt_prefix_ids: Optional[torch.LongTensor] = None,
+        prompt_prefix_mask: Optional[torch.LongTensor] = None,
         decoder_input_ids: Optional[torch.LongTensor] = None,
         decoder_attention_mask: Optional[torch.LongTensor] = None,
         head_mask: Optional[torch.Tensor] = None,
@@ -497,26 +585,26 @@ class SpeechEncoderBridgeMarianEncoderDecoder(PreTrainedModel):
             audio_attention_mask = None
 
         # pass the encoder outputs through the bridge network
-        bridge_outputs, audio_attention_mask = self.bridge(
+        connector_outputs, audio_attention_mask = self.connector(
                 encoder_outputs=encoder_outputs.last_hidden_state,
                 attention_mask=audio_attention_mask,
             )
 
         # combine the bridge outputs with the encoder prefix ids
-        if encoder_prefix_ids is not None:
+        if prompt_prefix_ids is not None:
 
 
             # embed the prefix ids
             emb = self.decoder.get_encoder().get_input_embeddings()
-            prefix_embeds = emb(encoder_prefix_ids)
+            prefix_embeds = emb(prompt_prefix_ids)
 
-            bridge_outputs.last_hidden_state = torch.hstack((prefix_embeds, bridge_outputs.last_hidden_state))
+            connector_outputs.last_hidden_state = torch.hstack((prefix_embeds, connector_outputs.last_hidden_state))
             if audio_attention_mask is not None:
-                audio_attention_mask = torch.hstack((encoder_prefix_mask, audio_attention_mask))
+                audio_attention_mask = torch.hstack((prompt_prefix_mask, audio_attention_mask))
 
         decoder_output = self.decoder(
             input_ids=None,
-            inputs_embeds=bridge_outputs.last_hidden_state,
+            inputs_embeds=connector_outputs.last_hidden_state,
             attention_mask=audio_attention_mask,
             decoder_input_ids=decoder_input_ids, # input_ids
             decoder_attention_mask=decoder_attention_mask,
@@ -535,8 +623,8 @@ class SpeechEncoderBridgeMarianEncoderDecoder(PreTrainedModel):
     def generate(
         self,
         input_features: torch.FloatTensor,
-        encoder_prefix_ids: Optional[torch.LongTensor] = None,
-        encoder_prefix_mask: Optional[torch.LongTensor] = None,
+        prompt_prefix_ids: Optional[torch.LongTensor] = None,
+        prompt_prefix_mask: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.LongTensor] = None,
         **generate_kwargs,
     ) -> torch.LongTensor:
@@ -566,25 +654,25 @@ class SpeechEncoderBridgeMarianEncoderDecoder(PreTrainedModel):
             audio_attention_mask = None
 
         # pass the encoder outputs through the bridge network
-        bridge_outputs, audio_attention_mask = self.bridge(
+        connector_outputs, audio_attention_mask = self.connector(
                 encoder_outputs=audio_embeds,
                 attention_mask=audio_attention_mask,
             )
 
         # combine the bridge outputs with the encoder prefix ids
-        if encoder_prefix_ids is not None:
+        if prompt_prefix_ids is not None:
 
             # embed the prefix ids
             emb = self.decoder.get_encoder().get_input_embeddings()
-            prefix_embeds = emb(encoder_prefix_ids)
+            prefix_embeds = emb(prompt_prefix_ids)
 
-            bridge_outputs.last_hidden_state = torch.hstack((prefix_embeds, bridge_outputs.last_hidden_state))
+            connector_outputs.last_hidden_state = torch.hstack((prefix_embeds, connector_outputs.last_hidden_state))
             if audio_attention_mask is not None:
-                audio_attention_mask = torch.hstack((encoder_prefix_mask, audio_attention_mask))
+                audio_attention_mask = torch.hstack((prompt_prefix_mask, audio_attention_mask))
 
         decoder_output = self.decoder.generate(
             input_ids=None, # input_ids
-            inputs_embeds=bridge_outputs.last_hidden_state,
+            inputs_embeds=connector_outputs.last_hidden_state,
             attention_mask=audio_attention_mask,
             **generate_kwargs,
         )

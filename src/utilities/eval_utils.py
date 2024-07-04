@@ -68,10 +68,11 @@ def compute_metrics_ctc(
 def compute_metrics(
     tokenizer: PreTrainedTokenizer, pred: PredictionOutput, wandb_pred_to_save: int = 10
 ) -> Dict[str, float]:
+    label_ids = pred.label_ids
     pred_ids = pred.predictions
 
-    label_ids = pred.label_ids
     label_ids[label_ids == -100] = tokenizer.pad_token_id
+    pred_ids[pred_ids == -100] = tokenizer.pad_token_id
 
     pred_str = tokenizer.batch_decode(pred_ids, skip_special_tokens=True)
     label_str = [label if label else "-" for label in tokenizer.batch_decode(label_ids, skip_special_tokens=True)]
@@ -83,6 +84,10 @@ def compute_metrics(
 
     if wandb.run is not None:
         write_wandb_pred(pred_str, label_str, rows_to_log=wandb_pred_to_save)
+
+    normalizer = EnglishNormalizer()
+    pred_str = [ normalizer(s).strip() for s in pred_str ]
+    label_str = [ normalizer(s).strip() for s in label_str ]
 
     return get_metrics(label_str, pred_str)
 

@@ -32,10 +32,10 @@ from utilities.training_arguments import (
     GeneralTrainingArguments,
     GenerationArguments,
     ModelArguments,
-    QFormerArguments
+    ConnectorArguments
 )
 
-from models.old_alignment import ApmoConfig
+from models.old_alignment import AlignmentConfig
 from models.aligned import SpeechEncoderBridgeMarianEncoderDecoder
 from models.t5_plus_marian import T5PlusMarian
 from models.ctc_encoder_plus_autoregressive_decoder import JointCTCAttentionEncoderDecoder
@@ -45,7 +45,7 @@ from utilities.training_utils import AdditionalLossTrackerTrainer
 if __name__ == "__main__":
     logging.set_verbosity_debug()
     logger = logging.get_logger("transformers")
-    parser = HfArgumentParser((ModelArguments, DataTrainingArguments, GeneralTrainingArguments, GenerationArguments, QFormerArguments))
+    parser = HfArgumentParser((ModelArguments, DataTrainingArguments, GeneralTrainingArguments, GenerationArguments, ConnectorArguments))
 
     model_args, data_args, training_args, gen_args, qformer_args = parser.parse_args_into_dataclasses()
 
@@ -93,7 +93,7 @@ if __name__ == "__main__":
     feature_extractor = AutoFeatureExtractor.from_pretrained(training_args.feature_extractor_name)
     tokenizer_target = AutoTokenizer.from_pretrained(training_args.tokenizer_name)
 
-    if qformer_args.encoder_prompt_prefix:
+    if qformer_args.prompt_prefix:
         assert training_args.tokenizer_source_name is not None, "Error: missing source language tokenizer"
         tokenizer_source = AutoTokenizer.from_pretrained(training_args.tokenizer_source_name)
     else:
@@ -127,13 +127,13 @@ if __name__ == "__main__":
 
 
     if model_args.from_config:
-        apmo_config = ApmoConfig.from_pretrained(model_args.from_config)
+        apmo_config = AlignmentConfig.from_pretrained(model_args.from_config)
     else:
 
         qformer_config = Blip2QFormerConfig(
-                hidden_size=qformer_args.qf_hidden_size,
-                num_hidden_layers=qformer_args.qf_n_layers,
-                num_attention_heads=qformer_args.qf_n_attn_heads,
+                hidden_size=qformer_args.conn_hidden_size,
+                num_hidden_layers=qformer_args.conn_layers,
+                num_attention_heads=qformer_args.conn_attn_heads,
                 intermediate_size=qformer_args.qf_intermediate_size,
                 hidden_act='gelu_new',
                 cross_attention_frequency=1,
@@ -145,14 +145,14 @@ if __name__ == "__main__":
             parsed_dict = dict(x.split("=") for x in qformer_args.qf_config_overrides.split(","))
             qformer_config.update(parsed_dict)
 
-        apmo_config = ApmoConfig(
+        apmo_config = AlignmentConfig(
                 encoder_config=encoder.config,
                 qformer_config=qformer_config,
                 lm_config=decoder.config,
                 num_query_tokens=qformer_args.n_queries,
                 mm_pooling=qformer_args.qf_mm_pooling,
                 mm_loss_weight=qformer_args.qf_mm_loss_weight,
-                bridge_type=qformer_args.bridge_type,
+                connector_type=qformer_args.connector_type,
             )
 
     if model_args.from_pretrained:
@@ -160,7 +160,7 @@ if __name__ == "__main__":
         if model_args.average_checkpoints:
             model_path = average_checkpoints(model_path)
 
-        config = ApmoConfig.from_pretrained(model_path)
+        config = AlignmentConfig.from_pretrained(model_path)
         logger.info(f"Loading model from pretrained checkpoint...")
         
         # replace the loaded decoder with the specified one
@@ -257,7 +257,7 @@ if __name__ == "__main__":
         audio_path=data_args.audio_column_name,
         text_path=data_args.text_column_name,
         model_input_name=model.main_input_name,
-        encoder_prompt_prefix=qformer_args.encoder_prompt_prefix,
+        prompt_prefix=qformer_args.prompt_prefix,
     )
 
     # 7. Initialize trainer

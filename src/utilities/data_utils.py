@@ -483,6 +483,7 @@ def load_multiple_datasets(
             min_input_len=min_input_len,
             split_long_segments_to_chunks=split_long_segments_to_chunks,
             reshuffle_at_start=dataset_config.get("reshuffle_at_start", False),
+            skip_audio_processing=False,
         )
 
         for column, global_column in [

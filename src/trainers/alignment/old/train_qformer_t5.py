@@ -33,10 +33,10 @@ from utilities.training_arguments import (
     GeneralTrainingArguments,
     GenerationArguments,
     ModelArguments,
-    QFormerArguments
+    ConnectorArguments
 )
 
-from models.old_alignment import ApmoConfig, ApmoModel
+from models.old_alignment import AlignmentConfig, ApmoModel
 from models.ctc_encoder_plus_autoregressive_decoder import JointCTCAttentionEncoderDecoder
 from utilities.training_utils import AdditionalLossTrackerTrainer
 
@@ -44,7 +44,7 @@ from utilities.training_utils import AdditionalLossTrackerTrainer
 if __name__ == "__main__":
     logging.set_verbosity_debug()
     logger = logging.get_logger("transformers")
-    parser = HfArgumentParser((ModelArguments, DataTrainingArguments, GeneralTrainingArguments, GenerationArguments, QFormerArguments))
+    parser = HfArgumentParser((ModelArguments, DataTrainingArguments, GeneralTrainingArguments, GenerationArguments, ConnectorArguments))
 
     model_args, data_args, training_args, gen_args, qformer_args = parser.parse_args_into_dataclasses()
 
@@ -98,13 +98,13 @@ if __name__ == "__main__":
     decoder = AutoModelForSeq2SeqLM.from_pretrained(model_args.base_decoder_model, use_safetensors=False)
 
     if model_args.from_config:
-        apmo_config = ApmoConfig.from_pretrained(model_args.from_config)
+        apmo_config = AlignmentConfig.from_pretrained(model_args.from_config)
     else:
 
         qformer_config = Blip2QFormerConfig(
-                hidden_size=qformer_args.qf_hidden_size,
-                num_hidden_layers=qformer_args.qf_n_layers,
-                num_attention_heads=qformer_args.qf_n_attn_heads,
+                hidden_size=qformer_args.conn_hidden_size,
+                num_hidden_layers=qformer_args.conn_layers,
+                num_attention_heads=qformer_args.conn_attn_heads,
                 intermediate_size=qformer_args.qf_intermediate_size,
                 hidden_act='gelu_new',
                 cross_attention_frequency=1,
@@ -116,7 +116,7 @@ if __name__ == "__main__":
             parsed_dict = dict(x.split("=") for x in qformer_args.qf_config_overrides.split(","))
             qformer_config.update(parsed_dict)
 
-        apmo_config = ApmoConfig(
+        apmo_config = AlignmentConfig(
                 encoder_config=encoder.config,
                 qformer_config=qformer_config,
                 lm_config=decoder.config,

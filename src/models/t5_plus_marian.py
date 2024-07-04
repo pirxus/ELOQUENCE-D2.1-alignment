@@ -31,7 +31,7 @@ from copy import deepcopy
 
 from models.utils import shift_tokens_right
 
-from models.old_alignment import SpeechQFormerMarianOutput, ApmoConfig
+from models.old_alignment import SpeechQFormerMarianOutput, AlignmentConfig
 
 class T5PlusMarian(PreTrainedModel):
     config_class = T5Config
@@ -39,7 +39,7 @@ class T5PlusMarian(PreTrainedModel):
     def __init__(
             self,
             model_path: Optional[str] = None,
-            config: Optional[ApmoConfig] = None,
+            config: Optional[AlignmentConfig] = None,
             encoder: Optional[T5ForConditionalGeneration] = None,
             tokenizer: Optional[PreTrainedTokenizer] = None,
             freeze_decoder: Optional[bool] = True,
