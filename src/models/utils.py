@@ -102,3 +102,21 @@ class SpeechEncoderOutputSubsampler(Conv1dSubsampler):
         attention_mask = attention_mask.flip([-1]).cumsum(-1).flip([-1]).long()
         return attention_mask
 
+def compute_accuracy(pad_outputs, pad_targets, ignore_label):
+    """Calculate accuracy.
+
+    Args:
+        pad_outputs (LongTensor): Prediction tensors (B, Lmax).
+        pad_targets (LongTensor): Target label tensors (B, Lmax).
+        ignore_label (int): Ignore label id.
+
+    Returns:
+        float: Accuracy value (0.0 - 1.0).
+
+    """
+    mask = pad_targets != ignore_label
+    numerator = torch.sum(
+        pad_outputs.masked_select(mask) == pad_targets.masked_select(mask)
+    )
+    denominator = torch.sum(mask)
+    return numerator.float() / denominator.float() #(FIX:MZY):return torch.Tensor type

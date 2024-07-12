@@ -400,7 +400,7 @@ class SpeechAlignedCollatorWithPadding:
 
         if self.prompt_suffix is not None:
             prompt_suffix_ids = self.tokenizer_source.batch_encode_plus(
-                [self.prompt_prefix for _ in features],
+                [self.prompt_suffix for _ in features],
                 return_attention_mask=True,
                 padding="longest",
                 return_tensors="pt",

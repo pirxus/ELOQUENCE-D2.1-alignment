@@ -70,12 +70,13 @@ class AlignmentNetwork(PreTrainedModel):
             self.forward = self._forward_linear
 
         elif self.model_type == 'linear_stacked':
-            # stack
 
-            self.fc = nn.Linear(config.qformer_config.encoder_hidden_size * 4, config.qformer_config.hidden_size)
+            downsampling_factor = config.downsampling_factor
+            self.fc = nn.Linear(config.qformer_config.encoder_hidden_size * downsampling_factor, config.qformer_config.hidden_size)
+            self.attention_pooling = nn.MaxPool1d(downsampling_factor, stride=downsampling_factor)
             self.forward = self._forward_linear_stacked
 
-        else:
+        elif self.model_type == 'ste':
             conv_config = SpeechEncoderOutputSubsampler.default_config
             conv_config.update({
                 'input_feat_per_channel': config.qformer_config.encoder_hidden_size,
@@ -101,6 +102,30 @@ class AlignmentNetwork(PreTrainedModel):
             self.connector = MarianEncoder(marian_config)
             self.connector.embed_tokens.weight.requires_grad = False
             self.forward = self._forward_ste
+
+        elif self.model_type == 'encoder_stacked':
+            downsampling_factor = config.downsampling_factor
+            self.fc = nn.Linear(config.qformer_config.encoder_hidden_size * downsampling_factor, config.qformer_config.hidden_size)
+            self.attention_pooling = nn.MaxPool1d(downsampling_factor, stride=downsampling_factor)
+
+            q_conf = config.qformer_config
+            marian_config = MarianConfig(
+                    d_model=q_conf.hidden_size,
+                    encoder_layers=q_conf.num_hidden_layers,
+                    decoder_layers=q_conf.num_hidden_layers,
+                    encoder_attention_heads=q_conf.num_attention_heads,
+                    decoder_attention_heads=q_conf.num_attention_heads,
+                    encoder_ffn_dim=q_conf.intermediate_size,
+                    decoder_ffn_dim=q_conf.intermediate_size,
+                    activation_function='gelu_new',
+                    attention_dropout=0.1,
+                    activation_dropout=0.1,
+                    scale_embedding=True,
+                    )
+
+            self.connector = MarianEncoder(marian_config)
+            self.connector.embed_tokens.weight.requires_grad = False
+            self.forward = self._forward_encoder_stacked
 
     def _forward_qformer(
             self,
@@ -174,7 +199,8 @@ class AlignmentNetwork(PreTrainedModel):
         audio_embeds = encoder_outputs.last_hidden_state
 
         # Downsample the speech encoder outputs 
-        mod = audio_embeds.shape[-2] % 4
+        downsampling_factor = self.config.downsampling_factor
+        mod = audio_embeds.shape[-2] % downsampling_factor
         if mod != 0:
             # append zeros to both the embeddings and the mask if the sequences are not divisible
             # by four
@@ -185,21 +211,20 @@ class AlignmentNetwork(PreTrainedModel):
                 mask_appendix = attention_mask[...,-1].unsqueeze(1).repeat(1, mod)
                 attention_mask = torch.cat((attention_mask, mask_appendix), dim=1)
 
-        emb_a = audio_embeds[...,0::4,:]
-        emb_b = audio_embeds[...,1::4,:]
-        emb_c = audio_embeds[...,2::4,:]
-        emb_d = audio_embeds[...,3::4,:]
-        audio_embeds = torch.cat((emb_a, emb_b, emb_c, emb_d), dim=-1)
+        # perform the stacking downsampling
+        embs = []
+        for i in range(downsampling_factor):
+            embs.append(audio_embeds[...,i::downsampling_factor,:])
+
+        audio_embeds = torch.cat(embs, dim=-1)
 
         # downsample the attention mask too
         if attention_mask is not None:
-            # NOTE: here we're just taking the first mask element for
-            # each group index, maybe not ideal?
-            attention_mask = attention_mask[:,::4]
+            attention_mask = self.attention_pooling(attention_mask.float()).long()
         else:
             attention_mask = None
 
-        # pass the encoder outputs through the bridge network
+        # project the downsampled embeddings through the linear layers..
         fc_out = F.gelu(self.fc(audio_embeds))
 
         connector_outputs = BaseModelOutput(
@@ -242,6 +267,61 @@ class AlignmentNetwork(PreTrainedModel):
         connector_outputs.last_hidden_state = self.language_projection(connector_outputs.last_hidden_state)
 
         return connector_outputs, attention_mask
+
+    def _forward_encoder_stacked(
+            self,
+            encoder_outputs,
+            attention_mask,
+        ):
+
+        if not isinstance(encoder_outputs, BaseModelOutput):
+            encoder_outputs = BaseModelOutput(last_hidden_state=encoder_outputs)
+
+        audio_embeds = encoder_outputs.last_hidden_state
+
+        # Downsample the speech encoder outputs 
+        downsampling_factor = self.config.downsampling_factor
+        mod = audio_embeds.shape[-2] % downsampling_factor
+        if mod != 0:
+            # append zeros to both the embeddings and the mask if the sequences are not divisible
+            # by four
+            appendix = torch.zeros((audio_embeds.shape[0], mod, audio_embeds.shape[-1]))
+            audio_embeds = torch.hstack((audio_embeds, appendix))
+
+            if attention_mask is not None:
+                mask_appendix = attention_mask[...,-1].unsqueeze(1).repeat(1, mod)
+                attention_mask = torch.cat((attention_mask, mask_appendix), dim=1)
+
+        # perform the stacking downsampling
+        embs = []
+        for i in range(downsampling_factor):
+            embs.append(audio_embeds[...,i::downsampling_factor,:])
+
+        audio_embeds = torch.cat(embs, dim=-1)
+
+        # downsample the attention mask too
+        if attention_mask is not None:
+            attention_mask = self.attention_pooling(attention_mask.float()).long()
+        else:
+            attention_mask = None
+
+        # project the downsampled embeddings through the linear layers..
+        # NOTE: I removed the gelu activation as it didn't seem right to place
+        # a nonlinearity before the transformer encoder
+        audio_embeds = self.fc(audio_embeds)
+
+        # pass the encoder outputs through the bridge network
+        connector_outputs = self.connector(
+                attention_mask=attention_mask,
+                inputs_embeds=audio_embeds,
+                return_dict=True,
+        )
+
+        connector_outputs.last_hidden_state = self.language_projection(connector_outputs.last_hidden_state)
+
+        return connector_outputs, attention_mask
+
+
 
 class SpeechEncoderBridgeTextDecoder(PreTrainedModel):
     config_class = AlignmentConfig

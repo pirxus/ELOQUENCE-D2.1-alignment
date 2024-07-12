@@ -85,19 +85,25 @@ if __name__ == "__main__":
 
     # 3. Instantiate model
     # -- load the asr encoder
-    encoder = WhisperForConditionalGeneration.from_pretrained(model_args.base_encoder_model)
+    encoder = WhisperForConditionalGeneration.from_pretrained(
+        model_args.base_encoder_model,
+        torch_dtype=torch.bfloat16,
+        attn_implementation='flash_attention_2',
+    )
     d_model = encoder.config.d_model
 
     # load and quantize the LLM
-    quantization_config = BitsAndBytesConfig(
-        load_in_4bit=True,
-        bnb_4bit_use_double_quant=True,
-        bnb_4bit_quant_type='nf4',
-        bnb_4bit_compute_dtype=torch.bfloat16,
-        bnb_4bit_quant_storage=torch.bfloat16,
-    )
+    if qformer_args.quantize_decoder:
+        quantization_config = BitsAndBytesConfig(
+            load_in_4bit=True,
+            bnb_4bit_use_double_quant=True,
+            bnb_4bit_quant_type='nf4',
+            bnb_4bit_compute_dtype=torch.bfloat16,
+            bnb_4bit_quant_storage=torch.bfloat16,
+        )
+    else:
+        quantization_config = None
 
-    # TODO: freeze decoder?
     decoder = AutoModelForCausalLM.from_pretrained(
         model_args.base_decoder_model,
         quantization_config=quantization_config,
@@ -133,6 +139,7 @@ if __name__ == "__main__":
                 mm_pooling=qformer_args.qf_mm_pooling,
                 mm_loss_weight=qformer_args.qf_mm_loss_weight,
                 connector_type=qformer_args.connector_type,
+                downsampling_factor=qformer_args.downsampling_factor,
             )
 
     if model_args.from_pretrained:
