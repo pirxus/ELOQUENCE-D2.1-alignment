@@ -5,7 +5,8 @@
       "steps_before_activation": 0,
       "fn_call_params": {
         "sampling_rate": 16000,
-        "return_tensors": "pt"
+        "return_tensors": "pt",
+        "return_attention_mask": true
       },
       "return_behaviour": [
         "input_features[0].T"
@@ -18,7 +19,8 @@
       "steps_before_activation": 0,
       "fn_call_params": {
         "sampling_rate": 16000,
-        "return_tensors": "pt"
+        "return_tensors": "pt",
+        "return_attention_mask": true
       },
       "return_behaviour": [
         "input_features[0].T"

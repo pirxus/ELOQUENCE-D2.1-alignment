@@ -1,15 +1,14 @@
 #!/bin/bash
-#$ -N whisper_sm_llama2_chat_linear
+#$ -N wsm_l2c_stlin_lc
 #$ -q long.q@supergpu*
 #$ -l ram_free=40G,mem_free=40G
-#$ -l matylda6=1
-#$ -l scratch=2
-#$ -l gpu=2,gpu_ram=40G
-#$ -o /mnt/matylda6/xsedla1h/projects/chime/logs/whisper_sm_llama2_chat_linear.o
-#$ -e /mnt/matylda6/xsedla1h/projects/chime/logs/whisper_sm_llama2_chat_linear.e
-N_GPUS=2
-
-EXPERIMENT="whisper_sm_llama2_chat_linear"
+#$ -l matylda6=2
+#$ -l scratch=1
+#$ -l gpu=4,gpu_ram=20G
+#$ -o /mnt/matylda6/xsedla1h/projects/chime/logs/wsm_l2c_stlin_lc.o
+#$ -e /mnt/matylda6/xsedla1h/projects/chime/logs/wsm_l2c_stlin_lc.e
+N_GPUS=4
+EXPERIMENT="wsm_l2c_stlin_lc"
 
 # Job should finish in about 2 days
 ulimit -t 200000
@@ -30,7 +29,8 @@ source /mnt/matylda6/xsedla1h/miniconda3/bin/activate /mnt/matylda6/xsedla1h/env
 WORK_DIR="/mnt/matylda6/xsedla1h/projects/huggingface_asr"
 EXPERIMENT_PATH="${WORK_DIR}/exp/${EXPERIMENT}"
 RECIPE_DIR="${WORK_DIR}/recipes/chime_alignment"
-DATASETS="${RECIPE_DIR}/datasets.json"
+#DATASETS="${RECIPE_DIR}/datasets.json"
+DATASETS="${RECIPE_DIR}/datasets_lc.json"
 
 cd $WORK_DIR || {
   echo "No such directory $WORK_DIR"
@@ -54,15 +54,16 @@ export CUDA_VISIBLE_DEVICES=$(free-gpus.sh $N_GPUS) || {
   echo "Could not obtain GPU."
   exit 1
 }
+echo "CUDA_VISIBLE_DEVICES=$CUDA_VISIBLE_DEVICES"
 
 args=(
   # General training arguments
   --output_dir=$EXPERIMENT_PATH
-  --per_device_train_batch_size="6"
-  --per_device_eval_batch_size="6"
+  --per_device_train_batch_size="1"
+  --per_device_eval_batch_size="1"
   --dataloader_num_workers="2"
   #--num_train_epochs="10"
-  --max_steps="100000"
+  --max_steps="150000"
   --group_by_length="True"
   --bf16
   --bf16_full_eval
@@ -74,12 +75,12 @@ args=(
 
   # Optimizer related arguments
   --optim="adamw_torch"
-  --learning_rate="1.5e-4"
-  --warmup_steps="20000"
-  --early_stopping_patience="5"
+  --learning_rate="1.2e-4"
+  --warmup_steps="3000"
+  --early_stopping_patience="3"
   --weight_decay="1e-6"
   --max_grad_norm="5.0"
-  --lsm_factor="0.1"
+  #--lsm_factor="0.1"
   --gradient_accumulation_steps="1"
 
   # Logging, saving and evaluation related arguments
@@ -109,18 +110,24 @@ args=(
   --data_preprocessing_config="${RECIPE_DIR}/data_preprocessing_whisper.json"
 
   # Model related arguments
-  --feature_extractor_name="openai/whisper-small"
-  --base_encoder_model="openai/whisper-small"
+  --feature_extractor_name="openai/whisper-large-v3"
+  --base_encoder_model="openai/whisper-large-v3"
 
   --tokenizer_name="meta-llama/Llama-2-7b-chat-hf"
   --base_decoder_model="meta-llama/Llama-2-7b-chat-hf"
-  --prompt_prefix='USER: Transcribe speech to text. '
-  --prompt_suffix=' ASSISTANT: '
+  #--prompt_prefix='USER: Transcribe speech to text. '
+  --prompt_suffix=' USER: Transcribe speech to lowercased text. ASSISTANT: '
   
-  --connector_type='linear'
-  --conn_layers=2
-  --conn_hidden_size=4096
-  --conn_attn_heads=16
+  #--connector_type='encoder_stacked'
+  #--downsampling_factor=5
+  #--conn_hidden_size=1280
+  #--conn_layers=2
+  #--conn_attn_heads=20
+  #--qf_intermediate_size=5120
+  
+  --connector_type='linear_stacked'
+  --downsampling_factor=5
+  --conn_hidden_size=2048
   --qf_intermediate_size=4096
 
   # Generation related arguments
