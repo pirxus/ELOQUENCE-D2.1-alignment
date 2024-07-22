@@ -222,6 +222,7 @@ class SpeechEncoderConnectorLMDecoder(PreTrainedModel):
                 decoder_input_ids = decoder_input_ids[:,1:]
 
         # 1. forward the audio through the encoder
+        if self.encoder.training: self.encoder.eval()
         encoder_outputs = self.encoder(
             input_features,
             attention_mask=attention_mask,
@@ -341,6 +342,7 @@ class SpeechEncoderConnectorLMDecoder(PreTrainedModel):
         attention_mask = torch.hstack(
             (audio_attention_mask, decoder_inputs_attn_mask))
 
+        if self.decoder.training: self.decoder.eval()
         decoder_outputs = self.decoder(
             inputs_embeds=decoder_inputs_embeds,
             attention_mask=attention_mask,

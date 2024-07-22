@@ -80,7 +80,6 @@ if __name__ == "__main__":
         training_args.tokenizer_name,
         add_eos_token = True,
     )
-
     tokenizer.pad_token_id = tokenizer.eos_token_id
 
     # 3. Instantiate model
@@ -94,13 +93,25 @@ if __name__ == "__main__":
 
     # load and quantize the LLM
     if qformer_args.quantize_decoder:
-        quantization_config = BitsAndBytesConfig(
-            load_in_4bit=True,
-            bnb_4bit_use_double_quant=True,
-            bnb_4bit_quant_type='nf4',
-            bnb_4bit_compute_dtype=torch.bfloat16,
-            bnb_4bit_quant_storage=torch.bfloat16,
-        )
+        if qformer_args.quantize_decoder == 4:
+            quantization_config = BitsAndBytesConfig(
+                load_in_4bit=True,
+                bnb_4bit_use_double_quant=True,
+                bnb_4bit_quant_type='nf4',
+                bnb_4bit_compute_dtype=torch.bfloat16,
+                bnb_4bit_quant_storage=torch.bfloat16,
+            )
+        elif qformer_args.quantize_decoder == 8:
+            # FIXME: this is not implemented yet
+            quantization_config = BitsAndBytesConfig(
+                load_in_8bit=True,
+                bnb_4bit_use_double_quant=True,
+                bnb_4bit_quant_type='nf4',
+                bnb_4bit_compute_dtype=torch.bfloat16,
+                bnb_4bit_quant_storage=torch.bfloat16,
+            )
+        else:
+            quantization_config = None
     else:
         quantization_config = None
 
@@ -108,6 +119,7 @@ if __name__ == "__main__":
         model_args.base_decoder_model,
         quantization_config=quantization_config,
         torch_dtype=torch.bfloat16,
+        #attn_implementation="flash_attention_2",
     )
 
     # set up lora for the decoder

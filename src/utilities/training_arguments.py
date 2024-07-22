@@ -147,6 +147,7 @@ class GenerationArguments:
     num_predictions_to_return: Optional[int] = field(default=1, metadata={"help": "Number of predictions to return."})
     nbest_path_to_save: Optional[str] = field(default="nbests", metadata={"help": "Path to save nbest hypotheses."})
     save_output_states: Optional[bool] = field(default=False, metadata={"help": "Whether to save output states."})
+    low_memory: Optional[bool] = field(default=False, metadata={"help": "Whether to use sequential beam search."})
     post_process_predictions: Optional[bool] = field(
         default=False, metadata={"help": "Whether to post process predictions."}
     )
