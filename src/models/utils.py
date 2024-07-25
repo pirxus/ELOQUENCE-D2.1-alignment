@@ -1,6 +1,7 @@
 import torch
 from transformers import PretrainedConfig
 from transformers.models.speech_to_text.modeling_speech_to_text import Conv1dSubsampler
+from typing import Optional
 
 
 def calculate_output_size(input_size, kernel_size, stride, left_padding=0, right_padding=0, dilation=1):
@@ -41,13 +42,13 @@ def calculate_output_size_multilayer(input_size, layers):
 
 # Copied from transformers.models.bart.modeling_bart.shift_tokens_right
 # added by: Simon Sedlacek
-def shift_tokens_right(input_ids: torch.Tensor, pad_token_id: int, decoder_start_token_id: int):
+def shift_tokens_right(input_ids: torch.Tensor, pad_token_id: Optional[int], decoder_start_token_id: Optional[int]):
     """
     Shift input ids one token to the right.
     """
     shifted_input_ids = input_ids.new_zeros(input_ids.shape)
     shifted_input_ids[:, 1:] = input_ids[:, :-1].clone()
-    shifted_input_ids[:, 0] = decoder_start_token_id
+    shifted_input_ids[:, 0] = decoder_start_token_id if decoder_start_token_id is not None else 0
 
     if pad_token_id is None:
         raise ValueError("self.model.config.pad_token_id has to be defined.")

@@ -395,7 +395,7 @@ class SpeechEncoderConnectorLMDecoder(PreTrainedModel):
 
         # 1. forward the audio through the encoder
         encoder_outputs = self.encoder(
-            input_features,
+            input_features.to(self.encoder.dtype),
             attention_mask=attention_mask,
             return_dict=True
         )
@@ -428,10 +428,11 @@ class SpeechEncoderConnectorLMDecoder(PreTrainedModel):
             audio_attention_mask = None
 
         # pass the encoder outputs through the bridge network
-        connector_outputs, audio_attention_mask = self.connector(
-            encoder_outputs=audio_embeds,
-            attention_mask=audio_attention_mask,
-        )
+        with torch.autocast(dtype=torch.bfloat16, device_type=self.device.type):
+            connector_outputs, audio_attention_mask = self.connector(
+                encoder_outputs=audio_embeds,
+                attention_mask=audio_attention_mask,
+            )
 
         batch_size = audio_embeds.shape[0]
 
