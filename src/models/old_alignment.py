@@ -75,6 +75,7 @@ class  AlignmentConfig(PretrainedConfig):
             ce_loss_weight=1.0,
             num_pretrain_epochs=0,
             downsampling_factor=4,
+            freeze_encoder=True,
             **kwargs
         ):
 
@@ -94,6 +95,7 @@ class  AlignmentConfig(PretrainedConfig):
         self.mm_micro_loss = mm_micro_loss
         self.connector_type = connector_type
         self.downsampling_factor = downsampling_factor
+        self.freeze_encoder = freeze_encoder
 
         super().__init__(**kwargs)
 

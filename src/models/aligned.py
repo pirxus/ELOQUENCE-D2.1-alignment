@@ -285,11 +285,12 @@ class AlignmentNetwork(PreTrainedModel):
         if mod != 0:
             # append zeros to both the embeddings and the mask if the sequences are not divisible
             # by four
-            appendix = torch.zeros((audio_embeds.shape[0], mod, audio_embeds.shape[-1]))
+            appendix = torch.zeros((audio_embeds.shape[0], downsampling_factor - mod,
+                                    audio_embeds.shape[-1]), device=audio_embeds.device)
             audio_embeds = torch.hstack((audio_embeds, appendix))
 
             if attention_mask is not None:
-                mask_appendix = attention_mask[...,-1].unsqueeze(1).repeat(1, mod)
+                mask_appendix = attention_mask[...,-1].unsqueeze(1).repeat(1, downsampling_factor - mod)
                 attention_mask = torch.cat((attention_mask, mask_appendix), dim=1)
 
         # perform the stacking downsampling

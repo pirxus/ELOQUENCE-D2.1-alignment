@@ -58,6 +58,13 @@ class ModelArguments:
         default=None, metadata={"help": "Type of mixing mechanism to use for finetuning."}
     )
 
+    """WavLM-specific arguments"""
+    layer_to_extract: Optional[int] = field(
+        default=None,
+        metadata={"help": "Intermediate layer from which to extract encoder features; defaults to output layer"}
+    )
+    freeze_encoder: Optional[bool] = field(default=True, metadata={"help": "Whether to freeze the encoder."})
+
 
 @dataclass
 class GeneralTrainingArguments(Seq2SeqTrainingArguments):
