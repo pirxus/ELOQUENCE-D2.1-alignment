@@ -234,6 +234,7 @@ def prepare_dataset(
     min_input_len: float,
     reshuffle_at_start: bool,
     skip_audio_processing: bool,
+    do_not_cast: Optional[bool] = False,
 ) -> DatasetDict:
     """Preprocesses dataset."""
     if reshuffle_at_start:
@@ -359,7 +360,8 @@ def prepare_dataset(
                     desc=f"Applying {transformation_name} transformation",
                 )
 
-    if not skip_audio_processing:
+    do_not_cast = True
+    if not skip_audio_processing and not do_not_cast:
         logger.info("Casting audio column to Audio, and length column to float32")
         feature_types = dataset[list(dataset.keys())[0]].features
         if audio_column_name is not None:
@@ -494,13 +496,17 @@ def load_multiple_datasets(
             if dataset_config.get(column) is not None and dataset_config.get(column) != global_column:
                 dataset_processed = dataset_processed.rename_column(dataset_config.get(column), global_column)
 
-        dataset_local = dataset_processed.remove_columns(
-            list(
-                set()
-                .union(*dataset_processed.column_names.values())
-                .difference([global_len_column, global_text_column, global_audio_column])
+        if len(config_dict) > 1: # FIXME: maybe this is not the ideal way..
+            dataset_local = dataset_processed.remove_columns(
+                list(
+                    set()
+                    .union(*dataset_processed.column_names.values())
+                    .difference([global_len_column, global_text_column, global_audio_column])
+                )
             )
-        )
+        else:
+            dataset_local = dataset_processed
+
         dataset_merged = join_datasets(
             dataset_merged,
             dataset_local,
@@ -597,6 +603,7 @@ def get_dataset(
                 dataset = load_dataset(
                     dataset_name,
                     dataset_config,
+                    splits=['train', 'test', 'dev'],
                     data_dir=data_dir,
                     keep_in_memory=False,
                     num_proc=preprocessing_num_workers,
@@ -607,6 +614,7 @@ def get_dataset(
                 # loads the dataset located at data_dir with the specific dataset_name builder in mind
                 dataset = load_dataset(
                     dataset_name,
+                    splits=['train', 'test', 'dev'],
                     data_dir=data_dir,
                     keep_in_memory=False, num_proc=preprocessing_num_workers
                 )

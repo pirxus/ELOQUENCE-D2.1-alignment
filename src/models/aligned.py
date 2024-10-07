@@ -11,6 +11,7 @@ from transformers import (
     Blip2QFormerConfig,
     Blip2QFormerModel,
     MarianConfig,
+    PreTrainedTokenizer,
 )
 from transformers.modeling_outputs import BaseModelOutput
 from transformers.models.marian.modeling_marian import MarianEncoder
@@ -25,13 +26,56 @@ from models.utils import SpeechEncoderOutputSubsampler, shift_tokens_right
 
 from models.old_alignment import SpeechQFormerMarianOutput, AlignmentConfig
 
+# define the forward method wrapper
+def soft_prompt_wrapper(func):
+    def inner_wrapper(self, encoder_outputs, attention_mask):
+        encoder_outputs, attention_mask = func(self, encoder_outputs, attention_mask)
+        batch_size = encoder_outputs.last_hidden_state.shape[0]
+
+        if self.prompt_prefix is not None:
+            prefix_expanded = self.prompt_prefix.expand(batch_size, -1, -1)
+
+            # prepend the soft prefix to the embeddings
+            encoder_outputs.last_hidden_state = torch.cat((prefix_expanded, encoder_outputs.last_hidden_state), dim=1)
+
+            # extend the attention mask -- do not disrupt the original one due to padding
+            if attention_mask is not None:
+                attn_mask_prefix = torch.ones(
+                    prefix_expanded.shape[:2],
+                    device=attention_mask.device,
+                    dtype=torch.long,
+                )
+                attention_mask = torch.cat((attn_mask_prefix, attention_mask), dim=1)
+
+        if self.prompt_suffix is not None:
+            suffix_expanded = self.prompt_suffix.expand(batch_size, -1, -1)
+
+            # append the soft suffix to the embeddings
+            encoder_outputs.last_hidden_state = torch.cat((encoder_outputs.last_hidden_state, suffix_expanded), dim=1)
+
+            # extend the attention mask -- do not disrupt the original one due to padding
+            if attention_mask is not None:
+                attn_mask_suffix = torch.ones(
+                    suffix_expanded.shape[:2],
+                    device=attention_mask.device,
+                    dtype=torch.long,
+                )
+                attention_mask = torch.cat((attention_mask, attn_mask_suffix), dim=1)
+
+        return encoder_outputs, attention_mask
+    return inner_wrapper
+
 class AlignmentNetwork(PreTrainedModel):
     config_class = AlignmentConfig
 
     def __init__(
             self,
             config: AlignmentConfig,
-            model_type: Optional[str] = 'qformer'
+            model_type: Optional[str] = 'qformer',
+            soft_prompt_init: Optional[torch.Tensor] = None,
+            init_prefix_from: Optional[torch.Tensor] = None,
+            init_suffix_from: Optional[torch.Tensor] = None, # TODO: embeddings or token ids? (for ids we need emb.layer)
+            tokenizer: Optional[PreTrainedTokenizer] = None,
         ):
         super().__init__(config)
         self.model_type = model_type
@@ -48,6 +92,53 @@ class AlignmentNetwork(PreTrainedModel):
         # first define the language projection as it's used by both alignment configurations
         self.language_projection = nn.Linear(config.qformer_config.hidden_size, lm_hidden_size)
 
+        # set up soft prompts
+        if config.prompt_tuning_prefix_len > 0 or init_prefix_from is not None:
+
+            if soft_prompt_init is not None:
+                self.prompt_prefix = nn.Parameter(
+                    torch.ones(1, config.prompt_tuning_prefix_len, lm_hidden_size) * torch.squeeze(soft_prompt_init)
+                )
+
+            elif init_prefix_from is not None:
+                if tokenizer is not None:
+                    raise NotImplementedError
+
+                else: # assume prompt embeddings were passed 
+                    assert len(init_prefix_from.shape) == 3, "We want shape of [1, N, D]"
+                    assert init_prefix_from.shape[-1] == lm_hidden_size, "Incorrect prompt embedding dimension"
+                    self.prompt_prefix = nn.Parameter(init_prefix_from)
+
+            else: # init to zeros..
+                self.prompt_prefix = nn.Parameter(
+                    torch.zeros(1, config.prompt_tuning_prefix_len, lm_hidden_size)
+                )
+        else: self.prompt_prefix = None
+
+        if config.prompt_tuning_suffix_len > 0 or init_suffix_from is not None:
+
+            if soft_prompt_init is not None:
+                self.prompt_suffix = nn.Parameter(
+                    torch.ones(1, config.prompt_tuning_suffix_len, lm_hidden_size) * torch.squeeze(soft_prompt_init)
+                )
+
+            elif init_suffix_from is not None:
+                if tokenizer is not None:
+                    raise NotImplementedError
+
+                else: # assume prompt embeddings were passed 
+                    assert len(init_suffix_from.shape) == 3, "We want shape of [1, N, D]"
+                    assert init_suffix_from.shape[-1] == lm_hidden_size, "Incorrect prompt embedding dimension"
+                    self.prompt_suffix = nn.Parameter(init_suffix_from)
+
+            else: # init to zeros..
+                self.prompt_suffix = nn.Parameter(
+                    torch.zeros(1, config.prompt_tuning_suffix_len, lm_hidden_size)
+                )
+
+        else: self.prompt_suffix = None
+
+        # setup the connector type...
         if self.model_type == 'qformer':
 
             self.query_tokens = nn.Parameter(
@@ -127,6 +218,8 @@ class AlignmentNetwork(PreTrainedModel):
             self.connector.embed_tokens.weight.requires_grad = False
             self.forward = self._forward_encoder_stacked
 
+
+    @soft_prompt_wrapper
     def _forward_qformer(
             self,
             encoder_outputs,
@@ -154,6 +247,7 @@ class AlignmentNetwork(PreTrainedModel):
 
         return query_output, None
 
+    @soft_prompt_wrapper
     def _forward_linear(
             self,
             encoder_outputs,
@@ -187,6 +281,7 @@ class AlignmentNetwork(PreTrainedModel):
 
         return connector_outputs, attention_mask
 
+    @soft_prompt_wrapper
     def _forward_linear_stacked(
             self,
             encoder_outputs,
@@ -203,7 +298,7 @@ class AlignmentNetwork(PreTrainedModel):
         mod = audio_embeds.shape[-2] % downsampling_factor
         if mod != 0:
             # append zeros to both the embeddings and the mask if the sequences are not divisible
-            # by four
+            # by downsampling_factor
             appendix = torch.zeros((audio_embeds.shape[0], mod, audio_embeds.shape[-1]))
             audio_embeds = torch.hstack((audio_embeds, appendix))
 
@@ -212,11 +307,17 @@ class AlignmentNetwork(PreTrainedModel):
                 attention_mask = torch.cat((attention_mask, mask_appendix), dim=1)
 
         # perform the stacking downsampling
-        embs = []
-        for i in range(downsampling_factor):
-            embs.append(audio_embeds[...,i::downsampling_factor,:])
+        audio_embeds = audio_embeds.contiguous().view(
+            audio_embeds.shape[0],
+            audio_embeds.shape[1] // downsampling_factor,
+            audio_embeds.shape[2] * downsampling_factor
+        )
 
-        audio_embeds = torch.cat(embs, dim=-1)
+        #embs = []
+        #for i in range(downsampling_factor):
+        #    embs.append(audio_embeds[...,i::downsampling_factor,:])
+
+        #audio_embeds = torch.cat(embs, dim=-1)
 
         # downsample the attention mask too
         if attention_mask is not None:
@@ -233,6 +334,7 @@ class AlignmentNetwork(PreTrainedModel):
 
         return connector_outputs, attention_mask
 
+    @soft_prompt_wrapper
     def _forward_ste(
             self,
             encoder_outputs,
@@ -268,6 +370,7 @@ class AlignmentNetwork(PreTrainedModel):
 
         return connector_outputs, attention_mask
 
+    @soft_prompt_wrapper
     def _forward_encoder_stacked(
             self,
             encoder_outputs,
@@ -284,7 +387,7 @@ class AlignmentNetwork(PreTrainedModel):
         mod = audio_embeds.shape[-2] % downsampling_factor
         if mod != 0:
             # append zeros to both the embeddings and the mask if the sequences are not divisible
-            # by four
+            # by downsampling_factor
             appendix = torch.zeros((audio_embeds.shape[0], mod, audio_embeds.shape[-1]))
             audio_embeds = torch.hstack((audio_embeds, appendix))
 
@@ -293,11 +396,17 @@ class AlignmentNetwork(PreTrainedModel):
                 attention_mask = torch.cat((attention_mask, mask_appendix), dim=1)
 
         # perform the stacking downsampling
-        embs = []
-        for i in range(downsampling_factor):
-            embs.append(audio_embeds[...,i::downsampling_factor,:])
+        audio_embeds = audio_embeds.contiguous().view(
+            audio_embeds.shape[0],
+            audio_embeds.shape[1] // downsampling_factor,
+            audio_embeds.shape[2] * downsampling_factor
+        )
 
-        audio_embeds = torch.cat(embs, dim=-1)
+        #embs = []
+        #for i in range(downsampling_factor):
+        #    embs.append(audio_embeds[...,i::downsampling_factor,:])
+
+        #audio_embeds = torch.cat(embs, dim=-1)
 
         # downsample the attention mask too
         if attention_mask is not None:

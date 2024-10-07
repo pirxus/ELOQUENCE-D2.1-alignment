@@ -16,7 +16,7 @@ from transformers.utils import logging
 import torch
 
 from utilities.callbacks import init_callbacks
-from utilities.collators import SpeechAlignedCollatorWithPadding
+from utilities.collators import FisherContextCollatorLeftPadding
 from utilities.data_utils import get_dataset
 from utilities.eval_utils import compute_metrics
 from utilities.model_utils import average_checkpoints as average_checkpoints
@@ -31,7 +31,6 @@ from utilities.training_arguments import (
 
 from models.old_alignment import AlignmentConfig
 from models.aligned_decoder_lm import SpeechEncoderConnectorLMDecoder
-from utilities.training_utils import AdditionalLossTrackerTrainer
 
 from peft import LoraConfig, get_peft_model, replace_lora_weights_loftq
 
@@ -95,7 +94,6 @@ if __name__ == "__main__":
     decoder = AutoModelForCausalLM.from_pretrained(
         model_args.base_decoder_model,
         torch_dtype=torch.bfloat16,
-        #attn_implementation="flash_attention_2",
     )
 
     # set up lora for the decoder
@@ -181,17 +179,20 @@ if __name__ == "__main__":
     callbacks = init_callbacks(data_args, training_args, dataset, feature_extractor)
 
     # 6. Initialize data collator
-    data_collator = SpeechAlignedCollatorWithPadding(
+    data_collator = FisherContextCollatorLeftPadding(
         feature_extractor=feature_extractor,
-        tokenizer_source=tokenizer,
-        tokenizer_target=tokenizer,
+        tokenizer=tokenizer,
         padding=True,
         sampling_rate=data_args.sampling_rate,
         audio_path=data_args.audio_column_name,
         text_path=data_args.text_column_name,
         model_input_name=model.main_input_name,
+        context_prefix=data_args.fisher_context_prefix,
         prompt_prefix=conn_args.prompt_prefix,
         prompt_suffix=conn_args.prompt_suffix,
+        mode=data_args.fisher_context_mode,
+        max_context=data_args.fisher_max_context,
+        context_trunc_to_shortest=data_args.fisher_context_trunc_to_shortest,
     )
 
     if gen_args.no_metrics:

@@ -1,5 +1,6 @@
 from dataclasses import dataclass
 from typing import Dict, List, Optional, Union
+from contextlib import contextmanager
 
 import torch
 from transformers import (
@@ -370,8 +371,13 @@ class SpeechAlignedCollatorWithPadding:
             for feature in features
         ]
 
+        if isinstance(features[0][self.text_path], list):
+            labels_prime = [ ' '.join(feature[self.text_path]) for feature in features ]
+        else:
+            labels_prime = [ feature[self.text_path] for feature in features ]
+
         labels = self.tokenizer_target.batch_encode_plus(
-            [feature[self.text_path] for feature in features],
+            labels_prime,
             return_attention_mask=True,
             padding="longest",
             return_tensors="pt",
@@ -520,5 +526,171 @@ class MultiTokMTCollatorWithPadding:
         batch["labels"] = labels
         batch["input_ids"] = input_ids["input_ids"]
         batch["attention_mask"] = input_ids["attention_mask"]
+
+        return batch
+
+@contextmanager
+def left_padding(tokenizer):
+    original_side = tokenizer.padding_side
+    try:
+        tokenizer.padding_side = 'left'
+        yield
+    finally:
+        tokenizer.padding_side = original_side
+
+@contextmanager
+def nadd_eos(tokenizer):
+    original = tokenizer.add_eos_token
+    try:
+        tokenizer.add_eos_token = False
+        yield
+    finally:
+        tokenizer.add_eos_token = original
+
+@contextmanager
+def nadd_bos(tokenizer):
+    original = tokenizer.add_bos_token
+    try:
+        tokenizer.add_bos_token = False
+        yield
+    finally:
+        tokenizer.add_bos_token = original
+
+@dataclass
+class FisherContextCollatorLeftPadding:
+    """ Data collator for the fisher dataset augmented with conversation context. """
+
+    feature_extractor: Union[Wav2Vec2FeatureExtractor, Speech2TextFeatureExtractor]
+    tokenizer: Optional[PreTrainedTokenizer] = None
+    padding: Union[bool, str] = True
+    max_length: Optional[int] = None
+    max_length_labels: Optional[int] = None
+    pad_to_multiple_of: Optional[int] = None
+    pad_to_multiple_of_labels: Optional[int] = None
+    sampling_rate: Optional[int] = 16_000
+    audio_path: Optional[str] = None
+    text_path: Optional[str] = None
+    model_input_name: Optional[str] = None
+    context_prefix: Optional[str] = 'Context: '
+    prompt_prefix: Optional[str] = None
+    prompt_suffix: Optional[str] = None
+    mode: Optional[str] = "default" # available modes: default, turns,
+    max_context: Optional[int] = 5
+    context_trunc_to_shortest: Optional[bool] = False
+
+    def __call__(
+        self, features: List[Dict[str, Union[List[int], torch.Tensor, Dict[str, BatchFeature]]]]
+    ) -> BatchFeature:
+        # split inputs and labels since they have to be of different lengths and need
+        # different padding methods
+        input_features = [
+            BatchFeature({self.feature_extractor.model_input_names[0]: feature['audio'].squeeze(dim=0)})
+            for feature in features
+        ]
+
+        # 1) Depending on the mode, assemble the labels
+        if self.mode == 'default':
+            labels_words = [ ' '.join(feature[self.text_path]) for feature in features ]
+
+        elif self.mode == 'turns':
+            labels_words = [ ' '.join([ spk + ': ' + utt for feature in features for utt, spk in zip(feature[self.text_path], feature['speakers']) ]) ]
+
+        with nadd_bos(self.tokenizer):
+            labels = self.tokenizer.batch_encode_plus(
+                labels_words,
+                return_attention_mask=True,
+                padding="longest",
+                return_tensors="pt",
+            )
+
+        # 2) Depending on the mode, assemble the context
+        max_context = self.max_context
+        if self.context_trunc_to_shortest: # FIXME: contexts of length zero break everything...
+            # NOTE: for now, I'm leaving the 1 here, but it should probably have a better solution..
+            max_context = min(min(list(map(lambda x: len(x['context']) if x['context'] else 1, features))), self.max_context)
+
+        if self.mode == 'default':
+            # the most monstrous list comprehension I've ever written..
+            context_words = []
+            for feature in features:
+                # FIXME: context zero lengt
+                if feature['context']:
+                    context_words.append(self.context_prefix + ' '.join([ ' '.join(turn['labels']) for turn in feature['context'][-max_context:]]))
+                else:
+                    context_words.append(self.context_prefix)
+
+        elif self.mode == 'turns': # FIXME: zero context kinda makes even less sense in this scenario...
+            context_words = []
+            for feature in features:
+                if feature['context']:
+                    context_words.append(self.context_prefix + ' '.join([ spk + ': ' + utt for turn in feature['context'][-max_context:] for utt, spk in zip(turn['labels'], turn['speakers']) ]))
+                else:
+                    context_words.append(self.context_prefix)
+
+        with left_padding(self.tokenizer), nadd_eos(self.tokenizer):
+            context = self.tokenizer.batch_encode_plus(
+                context_words,
+                return_attention_mask=True,
+                padding="longest",
+                return_tensors="pt",
+            )
+
+        # 3) Tokenize the embedding prefix
+        if self.prompt_prefix not in [None, '']:
+            with nadd_bos(self.tokenizer), nadd_eos(self.tokenizer):
+                prompt_prefix_ids = self.tokenizer.batch_encode_plus(
+                    [self.prompt_prefix for _ in features],
+                    return_attention_mask=True,
+                    padding="longest",
+                    return_tensors="pt",
+                )
+        else:
+            prompt_prefix_ids = None
+
+        # 3) Tokenize the embedding suffix
+        if self.prompt_suffix not in [None, '']:
+            with nadd_eos(self.tokenizer), nadd_bos(self.tokenizer):
+                prompt_suffix_ids = self.tokenizer.batch_encode_plus(
+                    [self.prompt_suffix for _ in features],
+                    return_attention_mask=True,
+                    padding="longest",
+                    return_tensors="pt",
+                )
+        else:
+            prompt_suffix_ids = None
+
+        # 4) Apply padding to the features
+        batch = self.feature_extractor.pad(
+            input_features,
+            padding=self.padding,
+            max_length=self.max_length,
+            pad_to_multiple_of=self.pad_to_multiple_of,
+            return_tensors="pt",
+            return_attention_mask=True,
+        )
+
+        if isinstance(self.feature_extractor, WhisperFeatureExtractor):
+            batch[self.feature_extractor.model_input_names[0]] = batch[
+                self.feature_extractor.model_input_names[0]
+            ].transpose(-2, -1)
+
+        labels = labels["input_ids"].masked_fill(labels.attention_mask.ne(1), -100)
+        batch["labels"] = labels
+
+        if context is not None:
+            batch["context_ids"] = context['input_ids']
+            batch["context_mask"] = context['attention_mask']
+
+        if prompt_prefix_ids is not None:
+            batch["prompt_prefix_ids"] = prompt_prefix_ids['input_ids']
+            batch["prompt_prefix_mask"] = prompt_prefix_ids['attention_mask']
+
+        if prompt_suffix_ids is not None:
+            batch["prompt_suffix_ids"] = prompt_suffix_ids['input_ids']
+            batch["prompt_suffix_mask"] = prompt_suffix_ids['attention_mask']
+
+        if self.model_input_name != self.feature_extractor.model_input_names[0]:
+            batch[self.model_input_name] = batch[self.feature_extractor.model_input_names[0]]
+            del batch[self.feature_extractor.model_input_names[0]]
 
         return batch

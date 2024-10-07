@@ -16,7 +16,7 @@ from nltk.translate.bleu_score import corpus_bleu
 
 import wandb
 
-SACREBLEU = False
+SACREBLEU = True
 if SACREBLEU:
     bleu = evaluate.load("sacrebleu")
 else:
@@ -76,11 +76,6 @@ def compute_metrics(
 
     pred_str = tokenizer.batch_decode(pred_ids, skip_special_tokens=True)
     label_str = [label if label else "-" for label in tokenizer.batch_decode(label_ids, skip_special_tokens=True)]
-
-    if isinstance(tokenizer, WhisperTokenizer):
-        normalizer = EnglishNormalizer()
-        pred_str = [ normalizer(s).strip() for s in pred_str ]
-        label_str = [ normalizer(s).strip() for s in label_str ]
 
     if wandb.run is not None:
         write_wandb_pred(pred_str, label_str, rows_to_log=wandb_pred_to_save)

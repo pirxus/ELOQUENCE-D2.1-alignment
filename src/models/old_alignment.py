@@ -75,6 +75,11 @@ class  AlignmentConfig(PretrainedConfig):
             ce_loss_weight=1.0,
             num_pretrain_epochs=0,
             downsampling_factor=4,
+            prompt_tuning_prefix_len=0,
+            prompt_tuning_suffix_len=0,
+            init_prompt_from_embeds=False,
+            prompt_tuning_prefix_init=None,
+            prompt_tuning_suffix_init=None,
             **kwargs
         ):
 
@@ -94,6 +99,11 @@ class  AlignmentConfig(PretrainedConfig):
         self.mm_micro_loss = mm_micro_loss
         self.connector_type = connector_type
         self.downsampling_factor = downsampling_factor
+        self.prompt_tuning_prefix_len = prompt_tuning_prefix_len
+        self.prompt_tuning_suffix_len = prompt_tuning_suffix_len
+        self.init_prompt_from_embeds = init_prompt_from_embeds
+        self.prompt_tuning_prefix_init = prompt_tuning_prefix_init
+        self.prompt_tuning_suffix_init = prompt_tuning_suffix_init
 
         super().__init__(**kwargs)
 

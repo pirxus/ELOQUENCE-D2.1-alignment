@@ -246,6 +246,19 @@ class DataTrainingArguments:
     how2_low_resource_split_file: Optional[str] = field(
         default=None, metadata={"help": "Path to a file specifying utterance ids to keep in the how2 dataset."}
     )
+    fisher_context_prefix: Optional[str] = field(
+        default="Conversation context: ", metadata={"help": "Text prefix to the fisher conversation context."}
+    )
+    fisher_context_mode: Optional[str] = field(
+        default="default", metadata={"help": "Fisher conversation data collator operation mode."}
+    )
+    fisher_max_context: Optional[int] = field(
+        default=10, metadata={"help": "Fisher conversation context max length."}
+    )
+    fisher_context_trunc_to_shortest: Optional[bool] = field(
+        default=False, metadata={"help": "Whether to truncate the fisher context to the shortest context length in the batch."}
+    )
+
 
 
 @dataclass
@@ -295,6 +308,11 @@ class ConnectorArguments:
     qformer_config: Optional[str] = field(
         default=None, metadata={"help": "Path to pretrained qformer model/config or model/config identifier from huggingface.co/models"}
     )
+    prompt_tuning_prefix_len: Optional[int] = field(default=0, metadata={"help": "Number of prefix embeddings for prompt tuning."})
+    prompt_tuning_suffix_len: Optional[int] = field(default=0, metadata={"help": "Number of suffix embeddings for prompt tuning."})
+    init_prompt_from_embeds: Optional[bool] = field(default=False, metadata={"help": "Whether to use the mean LLM embedding as the initalization point for the soft prompts (slow convergence)."})
+    prompt_tuning_prefix_init: Optional[str] = field(default=None, metadata={"help": "Base text prompt prefix to initialize the soft prompt tuning."})
+    prompt_tuning_suffix_init: Optional[str] = field(default=None, metadata={"help": "Base text prompt suffix to initialize the soft prompt tuning."})
     connector_type: Optional[str] = field(default='qformer', metadata={"help": "Architecture of the bridge network (qformer, conv)."})
     prompt_prefix: Optional[str] = field(default=None, metadata={"help": "Text prompt prefix to the connector output soft prompt."})
     prompt_suffix: Optional[str] = field(default=None, metadata={"help": "Text prompt suffix to the connector output soft prompt."})
