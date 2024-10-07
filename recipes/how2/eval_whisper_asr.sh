@@ -1,14 +1,15 @@
 #!/bin/bash
-#$ -N eval_whisper_how2_en_normalized
+#$ -N eval_whisper_how2_en_normalized_beam2
 #$ -q short.q@supergpu*
 #$ -l ram_free=40G,mem_free=40G
 #$ -l matylda6=0.5
-#$ -l ssd=1,ssd_free=200G
-#$ -l gpu=1,gpu_ram=20G
-#$ -o /mnt/matylda6/xsedla1h/projects/job_logs/asr_eval/eval_whisper_how2_en_normalized.o
-#$ -e /mnt/matylda6/xsedla1h/projects/job_logs/asr_eval/eval_whisper_how2_en_normalized.e
+#$ -l ssd=1,ssd_free=100G
+#$ -l gpu=2,gpu_ram=20G
+#$ -o /mnt/matylda6/xsedla1h/projects/job_logs/asr_eval/eval_whisper_how2_en_normalized_beam2.o
+#$ -e /mnt/matylda6/xsedla1h/projects/job_logs/asr_eval/eval_whisper_how2_en_normalized_beam2.e
 
-EXPERIMENT="eval_whisper_how2_en_normalized"
+N_GPUS=2
+EXPERIMENT="eval_whisper_how2_en_normalized_beam2"
 
 # Job should finish in 1 days
 ulimit -t 100000
@@ -58,7 +59,7 @@ echo "Copying data to ssd.."
 cp -r $HOW2_BASE /mnt/ssd/xsedla1h/${EXPERIMENT}
 
 # get the gpu
-export CUDA_VISIBLE_DEVICES=$(free-gpus.sh 1) || {
+export CUDA_VISIBLE_DEVICES=$(free-gpus.sh $N_GPUS) || {
   echo "Could not obtain GPU."
   exit 1
 }
@@ -69,7 +70,7 @@ args=(
   --output_dir=$EXPERIMENT_PATH
   --per_device_train_batch_size="32"
   --per_device_eval_batch_size="8"
-  --dataloader_num_workers="8"
+  --dataloader_num_workers="2"
   --num_train_epochs="70"
   --group_by_length="True"
   --do_evaluate
@@ -119,14 +120,18 @@ args=(
   --from_pretrained="openai/whisper-small.en"
 
   # Generation related arguments
-  --num_beams="1"
+  --num_beams="2"
   --max_length="448"
   --predict_with_generate
   #--post_process_predictions
 )
 
 echo "Running training.."
-python src/trainers/train_enc_dec_asr.py "${args[@]}"
+if [ "$N_GPUS" -gt 1 ]; then
+  torchrun --standalone --nnodes=1 --nproc-per-node=$N_GPUS src/trainers/train_enc_dec_asr.py "${args[@]}"
+else
+  python src/trainers/train_enc_dec_asr.py "${args[@]}"
+fi
 
 # delete the ssd directory
 echo "Cleaning the ssd directory.."
