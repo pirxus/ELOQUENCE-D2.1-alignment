@@ -145,8 +145,10 @@ class SpeechEncoderConnectorLMDecoder(PreTrainedModel):
         )
 
         # freeze encoder and decoder
+        if config.freeze_encoder:
+            self.freeze_encoder()
+
         self.do_freeze_decoder = freeze_decoder
-        self.freeze_encoder()
         if self.do_freeze_decoder:
             self.freeze_decoder() # NOTE: the freezing should be done when the model is initialized
 

@@ -1,6 +1,6 @@
 """Main training script for the encoder -> connector -> decoder-only LM architecture """
 import sys
-
+from typing import Optional, Union, Tuple
 from transformers import (
     AutoFeatureExtractor,
     AutoModelForCausalLM,
@@ -11,7 +11,10 @@ from transformers import (
     Blip2QFormerConfig,
     WhisperForConditionalGeneration,
     BitsAndBytesConfig,
+    WavLMModel,
+    WavLMConfig
 )
+from transformers.modeling_outputs import Wav2Vec2BaseModelOutput
 from transformers.utils import logging
 import torch
 
@@ -34,6 +37,41 @@ from models.aligned_decoder_lm import SpeechEncoderConnectorLMDecoder
 from utilities.training_utils import AdditionalLossTrackerTrainer
 
 from peft import LoraConfig, get_peft_model, replace_lora_weights_loftq
+
+
+class WavLMWrapperConfig(WavLMConfig):
+    layer_to_extract = None
+
+class WavLMModelWrapper(WavLMModel):
+    def __init__(self, config: WavLMWrapperConfig):
+        super().__init__(config)
+
+    def get_encoder(self):
+        return self
+
+    def forward(
+        self,
+        input_values: Optional[torch.Tensor],
+        attention_mask: Optional[torch.Tensor] = None,
+        mask_time_indices: Optional[torch.FloatTensor] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+    ) -> Union[Tuple, Wav2Vec2BaseModelOutput]:
+        wav_lm_output = super().forward(
+            input_values=input_values,
+            attention_mask=attention_mask,
+            mask_time_indices=mask_time_indices,
+            output_attentions=output_attentions,
+            output_hidden_states=True,
+            return_dict=return_dict,
+        )
+        if self.config.layer_to_extract is None:
+            return wav_lm_output
+        else:
+            _hidden_state = wav_lm_output.hidden_states[self.config.layer_to_extract]
+            wav_lm_output.last_hidden_state = _hidden_state
+            return wav_lm_output
 
 
 if __name__ == "__main__":
@@ -85,12 +123,23 @@ if __name__ == "__main__":
 
     # 3. Instantiate model
     # -- load the asr encoder
-    encoder = WhisperForConditionalGeneration.from_pretrained(
-        model_args.base_encoder_model,
-        torch_dtype=torch.bfloat16,
-        attn_implementation='flash_attention_2',
-    )
-    d_model = encoder.config.d_model
+    if 'whisper' in model_args.base_encoder_model:
+        encoder = WhisperForConditionalGeneration.from_pretrained(
+            model_args.base_encoder_model,
+            torch_dtype=torch.bfloat16,
+            attn_implementation='flash_attention_2',
+        )
+        d_model = encoder.config.d_model
+    elif 'wavlm' in model_args.base_encoder_model:
+        encoder = WavLMModelWrapper.from_pretrained(
+            model_args.base_encoder_model,
+            torch_dtype=torch.bfloat16,
+        )
+        encoder.config.apply_spec_augment = False
+        encoder.config.layer_to_extract = model_args.layer_to_extract
+        d_model = encoder.config.hidden_size
+    else:
+        raise NotImplementedError('only Whisper and WavLm are supported')
 
     decoder = AutoModelForCausalLM.from_pretrained(
         model_args.base_decoder_model,
@@ -133,6 +182,7 @@ if __name__ == "__main__":
                 init_prompt_from_embeds=conn_args.init_prompt_from_embeds,
                 prompt_tuning_prefix_init=conn_args.prompt_tuning_prefix_init,
                 prompt_tuning_suffix_init=conn_args.prompt_tuning_suffix_init,
+                freeze_encoder=model_args.freeze_encoder,
             )
 
     # get the initialization point for the soft prompts if specified so

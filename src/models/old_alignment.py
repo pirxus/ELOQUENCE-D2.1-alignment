@@ -80,6 +80,7 @@ class  AlignmentConfig(PretrainedConfig):
             init_prompt_from_embeds=False,
             prompt_tuning_prefix_init=None,
             prompt_tuning_suffix_init=None,
+            freeze_encoder=True,
             **kwargs
         ):
 
@@ -104,6 +105,7 @@ class  AlignmentConfig(PretrainedConfig):
         self.init_prompt_from_embeds = init_prompt_from_embeds
         self.prompt_tuning_prefix_init = prompt_tuning_prefix_init
         self.prompt_tuning_suffix_init = prompt_tuning_suffix_init
+        self.freeze_encoder = freeze_encoder
 
         super().__init__(**kwargs)
 
