@@ -1,15 +1,13 @@
 #!/bin/bash
-#$ -N wsm_olmo1b_stte_w2000
-#$ -q long.q@supergpu18
+#$ -N eval_slurp_wsm_olmo1b_stte_w2000_how2
+#$ -q short.q@supergpu*
 #$ -l ram_free=40G,mem_free=40G
 #$ -l matylda6=1
-#$ -l gpu=2,gpu_ram=20G
-#$ -o /mnt/matylda6/xsedla1h/projects/job_logs/eloquence/wsm_olmo1b_stte_w2000.o
-#$ -e /mnt/matylda6/xsedla1h/projects/job_logs/eloquence/wsm_olmo1b_stte_w2000.e
-N_GPUS=2
-EXPERIMENT="wsm_olmo1b_stte_w2000"
+#$ -l gpu=1,gpu_ram=20G
+#$ -o /mnt/matylda6/xsedla1h/projects/job_logs/eloquence/eval_slurp_wsm_olmo1b_stte_w2000_how2.o
+#$ -e /mnt/matylda6/xsedla1h/projects/job_logs/eloquence/eval_slurp_wsm_olmo1b_stte_w2000_how2.e
 N_GPUS=1
-EXPERIMENT="test"
+EXPERIMENT="eval_slurp_wsm_olmo1b_stte_w2000_how2"
 
 # Job should finish in about 2 days
 ulimit -t 200000
@@ -23,6 +21,8 @@ ulimit -v unlimited
 ulimit -u 4096
 
 # Initialize environment
+unset PYTHONPATH
+unset PYTHONHOME
 source /mnt/matylda6/xsedla1h/miniconda3/bin/activate /mnt/matylda6/xsedla1h/envs/huggingface_asr
 
 WORK_DIR="/mnt/matylda6/xsedla1h/projects/huggingface_asr"
@@ -30,7 +30,9 @@ EXPERIMENT_PATH="${WORK_DIR}/exp/${EXPERIMENT}"
 RECIPE_DIR="${WORK_DIR}/recipes/eloquence"
 #DATASETS="${RECIPE_DIR}/datasets.json"
 #DATASETS="${RECIPE_DIR}/datasets_lc.json"
-DATASETS="${RECIPE_DIR}/datasets_how2.json"
+#DATASETS="${RECIPE_DIR}/datasets.json"
+#DATASETS="${RECIPE_DIR}/datasets_how2.json"
+DATASETS="${RECIPE_DIR}/datasets_slurp.json"
 
 cd $WORK_DIR || {
   echo "No such directory $WORK_DIR"
@@ -60,14 +62,14 @@ args=(
   # General training arguments
   --output_dir=$EXPERIMENT_PATH
   --per_device_train_batch_size="20" # 20
-  --per_device_eval_batch_size="24" # 24
+  --per_device_eval_batch_size="32" # 24
   --dataloader_num_workers="4"
   --num_train_epochs="14"
   #--max_steps="150000"
   --group_by_length="True"
   --bf16
   --bf16_full_eval
-  --do_train
+  #--do_train
   --do_evaluate
   --load_best_model_at_end
   --qformer_eval_callback
@@ -103,26 +105,27 @@ args=(
   --preprocessing_num_workers="16"
   --writer_batch_size="200" # 1000
   --collator_rename_features="False"
+  #--validation_split how2_val
+  #--test_splits how2_val how2_dev5 
+  #--validation_split librispeech_validation.clean
+  #--test_splits librispeech_test.clean #librispeech_validation.clean librispeech_test.clean
   --validation_split val
-  --test_splits val dev5 
+  --test_splits val slurp_test
 
   # Preprocessing related arguments
   --data_preprocessing_config="${RECIPE_DIR}/data_preprocessing_whisper.json"
 
   # Model related arguments
-  #--from_pretrained=""
+  --from_pretrained="/mnt/matylda6/xsedla1h/projects/huggingface_asr/exp/wsm_olmo1b_stte_w2000/checkpoint-17000"
+  #--from_pretrained="/mnt/matylda6/xsedla1h/projects/huggingface_asr/exp/wsm_olmo1b_stte/checkpoint-17000"
 
   --feature_extractor_name="openai/whisper-small.en"
   --base_encoder_model="openai/whisper-small.en"
 
   --tokenizer_name="allenai/OLMo-1B-hf"
   --base_decoder_model="allenai/OLMo-1B-hf"
-  #--prompt_prefix='Transcribe speech to text: '
-  #--prompt_suffix='\nTranscript: ' 
-  #--prompt_tuning_prefix_len=8
-  #--prompt_tuning_suffix_len=4
-  --prompt_tuning_prefix_init='USER: Transcribe speech to text: '
-  --prompt_tuning_suffix_init=' ASSISTANT: '
+  --prompt_prefix='Transcribe speech to text: '
+  --prompt_suffix='\nTranscript: ' 
   
   --connector_type='encoder_stacked'
   --downsampling_factor=5
@@ -139,6 +142,7 @@ args=(
   # Generation related arguments
   --num_beams="2"
   --max_new_tokens=150
+  #--length_penalty="0.5"
   --predict_with_generate
   #--no_metrics
 )

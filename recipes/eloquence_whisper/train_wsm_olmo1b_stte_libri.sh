@@ -1,15 +1,13 @@
 #!/bin/bash
-#$ -N wsm_olmo1b_stte_w2000
-#$ -q long.q@supergpu18
+#$ -N wsm_olmo1b_stte_w2000_libri
+#$ -q long.q@supergpu*
 #$ -l ram_free=40G,mem_free=40G
 #$ -l matylda6=1
 #$ -l gpu=2,gpu_ram=20G
-#$ -o /mnt/matylda6/xsedla1h/projects/job_logs/eloquence/wsm_olmo1b_stte_w2000.o
-#$ -e /mnt/matylda6/xsedla1h/projects/job_logs/eloquence/wsm_olmo1b_stte_w2000.e
+#$ -o /mnt/matylda6/xsedla1h/projects/job_logs/eloquence/wsm_olmo1b_stte_w2000_libri.o
+#$ -e /mnt/matylda6/xsedla1h/projects/job_logs/eloquence/wsm_olmo1b_stte_w2000_libri.e
 N_GPUS=2
 EXPERIMENT="wsm_olmo1b_stte_w2000"
-N_GPUS=1
-EXPERIMENT="test"
 
 # Job should finish in about 2 days
 ulimit -t 200000
@@ -23,6 +21,8 @@ ulimit -v unlimited
 ulimit -u 4096
 
 # Initialize environment
+unset PYTHONPATH
+unset PYTHONHOME
 source /mnt/matylda6/xsedla1h/miniconda3/bin/activate /mnt/matylda6/xsedla1h/envs/huggingface_asr
 
 WORK_DIR="/mnt/matylda6/xsedla1h/projects/huggingface_asr"
@@ -117,12 +117,8 @@ args=(
 
   --tokenizer_name="allenai/OLMo-1B-hf"
   --base_decoder_model="allenai/OLMo-1B-hf"
-  #--prompt_prefix='Transcribe speech to text: '
-  #--prompt_suffix='\nTranscript: ' 
-  #--prompt_tuning_prefix_len=8
-  #--prompt_tuning_suffix_len=4
-  --prompt_tuning_prefix_init='USER: Transcribe speech to text: '
-  --prompt_tuning_suffix_init=' ASSISTANT: '
+  --prompt_prefix='Transcribe speech to text: '
+  --prompt_suffix='\nTranscript: ' 
   
   --connector_type='encoder_stacked'
   --downsampling_factor=5

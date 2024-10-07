@@ -1,15 +1,13 @@
 #!/bin/bash
-#$ -N wsm_olmo1b_stte_w2000
-#$ -q long.q@supergpu18
+#$ -N wsm_olmo1b_stlin_w1000_how2
+#$ -q long.q@supergpu*
 #$ -l ram_free=40G,mem_free=40G
 #$ -l matylda6=1
 #$ -l gpu=2,gpu_ram=20G
-#$ -o /mnt/matylda6/xsedla1h/projects/job_logs/eloquence/wsm_olmo1b_stte_w2000.o
-#$ -e /mnt/matylda6/xsedla1h/projects/job_logs/eloquence/wsm_olmo1b_stte_w2000.e
+#$ -o /mnt/matylda6/xsedla1h/projects/job_logs/eloquence/wsm_olmo1b_stlin_w1000_how2.o
+#$ -e /mnt/matylda6/xsedla1h/projects/job_logs/eloquence/wsm_olmo1b_stlin_w1000_how2.e
 N_GPUS=2
-EXPERIMENT="wsm_olmo1b_stte_w2000"
-N_GPUS=1
-EXPERIMENT="test"
+EXPERIMENT="wsm_olmo1b_stlin_w1000_how2"
 
 # Job should finish in about 2 days
 ulimit -t 200000
@@ -37,9 +35,6 @@ cd $WORK_DIR || {
   exit 1
 }
 
-# set pythonpath so that python works
-export PYTHONPATH="${PYTHONPATH}:${WORK_DIR}/src"
-
 export TRANSFORMERS_OFFLINE=1
 export HF_DATASETS_OFFLINE=1
 export HF_HUB_OFFLINE=1
@@ -59,7 +54,7 @@ echo "CUDA_VISIBLE_DEVICES=$CUDA_VISIBLE_DEVICES"
 args=(
   # General training arguments
   --output_dir=$EXPERIMENT_PATH
-  --per_device_train_batch_size="20" # 20
+  --per_device_train_batch_size="16" # 20
   --per_device_eval_batch_size="24" # 24
   --dataloader_num_workers="4"
   --num_train_epochs="14"
@@ -76,7 +71,7 @@ args=(
   # Optimizer related arguments
   --optim="adamw_torch"
   --learning_rate="1e-4"
-  --warmup_steps="2000"
+  --warmup_steps="1000"
   --early_stopping_patience="3"
   --weight_decay="1e-6"
   --max_grad_norm="5.0"
@@ -104,7 +99,7 @@ args=(
   --writer_batch_size="200" # 1000
   --collator_rename_features="False"
   --validation_split val
-  --test_splits val dev5 
+  --test_splits val how2_dev5
 
   # Preprocessing related arguments
   --data_preprocessing_config="${RECIPE_DIR}/data_preprocessing_whisper.json"
@@ -117,24 +112,20 @@ args=(
 
   --tokenizer_name="allenai/OLMo-1B-hf"
   --base_decoder_model="allenai/OLMo-1B-hf"
-  #--prompt_prefix='Transcribe speech to text: '
-  #--prompt_suffix='\nTranscript: ' 
-  #--prompt_tuning_prefix_len=8
-  #--prompt_tuning_suffix_len=4
-  --prompt_tuning_prefix_init='USER: Transcribe speech to text: '
-  --prompt_tuning_suffix_init=' ASSISTANT: '
+  --prompt_prefix='Transcribe speech to text: '
+  --prompt_suffix='\nTranscript: ' 
   
-  --connector_type='encoder_stacked'
-  --downsampling_factor=5
-  --conn_hidden_size=1024
-  --conn_layers=2
-  --conn_attn_heads=16
-  --qf_intermediate_size=4096
-  
-  #--connector_type='linear_stacked'
+  #--connector_type='encoder_stacked'
   #--downsampling_factor=5
-  #--conn_hidden_size=2048
+  #--conn_hidden_size=1024
+  #--conn_layers=2
+  #--conn_attn_heads=16
   #--qf_intermediate_size=4096
+  
+  --connector_type='linear_stacked'
+  --downsampling_factor=5
+  --conn_hidden_size=2048
+  --qf_intermediate_size=4096
 
   # Generation related arguments
   --num_beams="2"

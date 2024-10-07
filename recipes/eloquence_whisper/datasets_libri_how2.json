@@ -22,5 +22,26 @@
     ],
     "additional_args": {
     }
+  },
+  {
+    "dataset_name": "/mnt/matylda6/xsedla1h/data/how2",
+    "dataset_id": "how2",
+    "load_from_disk": true,
+    "train_splits": [
+      "train"
+    ],
+    "validation_splits": [
+      "val"
+    ],
+    "test_splits": [
+      "dev5"
+    ],
+    "text_column_name": "transcription",
+    "audio_column_name": "audio",
+    "length_column_name": "input_len",
+    "text_transformations": [
+    ],
+    "additional_args": {
+    }
   }
 ]

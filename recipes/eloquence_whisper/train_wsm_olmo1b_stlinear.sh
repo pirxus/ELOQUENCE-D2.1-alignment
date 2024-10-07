@@ -1,15 +1,13 @@
 #!/bin/bash
-#$ -N wsm_olmo1b_stte_w2000
-#$ -q long.q@supergpu18
+#$ -N wsm_olmo1b_stlinear_h2_w2000
+#$ -q long.q@supergpu*
 #$ -l ram_free=40G,mem_free=40G
 #$ -l matylda6=1
 #$ -l gpu=2,gpu_ram=20G
-#$ -o /mnt/matylda6/xsedla1h/projects/job_logs/eloquence/wsm_olmo1b_stte_w2000.o
-#$ -e /mnt/matylda6/xsedla1h/projects/job_logs/eloquence/wsm_olmo1b_stte_w2000.e
+#$ -o /mnt/matylda6/xsedla1h/projects/job_logs/eloquence/wsm_olmo1b_stlinear_h2_w2000.o
+#$ -e /mnt/matylda6/xsedla1h/projects/job_logs/eloquence/wsm_olmo1b_stlinear_h2_w2000.e
 N_GPUS=2
-EXPERIMENT="wsm_olmo1b_stte_w2000"
-N_GPUS=1
-EXPERIMENT="test"
+EXPERIMENT="wsm_olmo1b_stlinear_h2_w2000"
 
 # Job should finish in about 2 days
 ulimit -t 200000
@@ -23,6 +21,8 @@ ulimit -v unlimited
 ulimit -u 4096
 
 # Initialize environment
+unset PYTHONPATH
+unset PYTHONHOME
 source /mnt/matylda6/xsedla1h/miniconda3/bin/activate /mnt/matylda6/xsedla1h/envs/huggingface_asr
 
 WORK_DIR="/mnt/matylda6/xsedla1h/projects/huggingface_asr"
@@ -60,9 +60,9 @@ args=(
   # General training arguments
   --output_dir=$EXPERIMENT_PATH
   --per_device_train_batch_size="20" # 20
-  --per_device_eval_batch_size="24" # 24
+  --per_device_eval_batch_size="24"
   --dataloader_num_workers="4"
-  --num_train_epochs="14"
+  --num_train_epochs="20"
   #--max_steps="150000"
   --group_by_length="True"
   --bf16
@@ -103,41 +103,35 @@ args=(
   --preprocessing_num_workers="16"
   --writer_batch_size="200" # 1000
   --collator_rename_features="False"
-  --validation_split val
   --test_splits val dev5 
+  --validation_split val
 
   # Preprocessing related arguments
   --data_preprocessing_config="${RECIPE_DIR}/data_preprocessing_whisper.json"
 
   # Model related arguments
-  #--from_pretrained=""
-
   --feature_extractor_name="openai/whisper-small.en"
   --base_encoder_model="openai/whisper-small.en"
 
   --tokenizer_name="allenai/OLMo-1B-hf"
   --base_decoder_model="allenai/OLMo-1B-hf"
-  #--prompt_prefix='Transcribe speech to text: '
-  #--prompt_suffix='\nTranscript: ' 
-  #--prompt_tuning_prefix_len=8
-  #--prompt_tuning_suffix_len=4
-  --prompt_tuning_prefix_init='USER: Transcribe speech to text: '
-  --prompt_tuning_suffix_init=' ASSISTANT: '
+  --prompt_prefix='Transcribe speech to text: '
+  --prompt_suffix='\nTranscript: ' 
   
-  --connector_type='encoder_stacked'
-  --downsampling_factor=5
-  --conn_hidden_size=1024
-  --conn_layers=2
-  --conn_attn_heads=16
-  --qf_intermediate_size=4096
-  
-  #--connector_type='linear_stacked'
+  #--connector_type='encoder_stacked'
   #--downsampling_factor=5
-  #--conn_hidden_size=2048
+  #--conn_hidden_size=1024
+  #--conn_layers=2
+  #--conn_attn_heads=16
   #--qf_intermediate_size=4096
+  
+  --connector_type='linear_stacked'
+  --downsampling_factor=5
+  --conn_hidden_size=2048
+  --qf_intermediate_size=4096
 
   # Generation related arguments
-  --num_beams="2"
+  --num_beams="1"
   --max_new_tokens=150
   --predict_with_generate
   #--no_metrics

@@ -1,13 +1,13 @@
 #!/bin/bash
-#$ -N wsm_olmo1b_stte_w2000
-#$ -q long.q@supergpu18
+#$ -N wsm_olmo1b_stte_w2000_fisher_context
+#$ -q long.q@supergpu*
 #$ -l ram_free=40G,mem_free=40G
-#$ -l matylda6=1
+#$ -l matylda6=1,scratch=1
 #$ -l gpu=2,gpu_ram=20G
-#$ -o /mnt/matylda6/xsedla1h/projects/job_logs/eloquence/wsm_olmo1b_stte_w2000.o
-#$ -e /mnt/matylda6/xsedla1h/projects/job_logs/eloquence/wsm_olmo1b_stte_w2000.e
+#$ -o /mnt/matylda6/xsedla1h/projects/job_logs/eloquence/wsm_olmo1b_stte_w2000_fisher_context.o
+#$ -e /mnt/matylda6/xsedla1h/projects/job_logs/eloquence/wsm_olmo1b_stte_w2000_fisher_context.e
 N_GPUS=2
-EXPERIMENT="wsm_olmo1b_stte_w2000"
+EXPERIMENT="wsm_olmo1b_stte_w2000_fisher_context"
 N_GPUS=1
 EXPERIMENT="test"
 
@@ -29,16 +29,16 @@ WORK_DIR="/mnt/matylda6/xsedla1h/projects/huggingface_asr"
 EXPERIMENT_PATH="${WORK_DIR}/exp/${EXPERIMENT}"
 RECIPE_DIR="${WORK_DIR}/recipes/eloquence"
 #DATASETS="${RECIPE_DIR}/datasets.json"
+#DATASETS="${RECIPE_DIR}/datasets_libri_how2.json"
 #DATASETS="${RECIPE_DIR}/datasets_lc.json"
-DATASETS="${RECIPE_DIR}/datasets_how2.json"
+#DATASETS="${RECIPE_DIR}/datasets_how2.json"
+DATASETS="${RECIPE_DIR}/datasets_fisher_ctx.json"
+
 
 cd $WORK_DIR || {
   echo "No such directory $WORK_DIR"
   exit 1
 }
-
-# set pythonpath so that python works
-export PYTHONPATH="${PYTHONPATH}:${WORK_DIR}/src"
 
 export TRANSFORMERS_OFFLINE=1
 export HF_DATASETS_OFFLINE=1
@@ -59,11 +59,11 @@ echo "CUDA_VISIBLE_DEVICES=$CUDA_VISIBLE_DEVICES"
 args=(
   # General training arguments
   --output_dir=$EXPERIMENT_PATH
-  --per_device_train_batch_size="20" # 20
-  --per_device_eval_batch_size="24" # 24
+  --per_device_train_batch_size="8" # 16
+  --per_device_eval_batch_size="16" # 24
   --dataloader_num_workers="4"
-  --num_train_epochs="14"
-  #--max_steps="150000"
+  #--num_train_epochs="14"
+  --max_steps="150000"
   --group_by_length="True"
   --bf16
   --bf16_full_eval
@@ -88,8 +88,8 @@ args=(
   --logging_steps="10"
   --save_strategy="steps"
   --evaluation_strategy="steps"
-  --save_steps="1000"
-  --eval_steps="1000"
+  --save_steps="2000"
+  --eval_steps="2000"
   --wandb_predictions_to_save=100 # 60
   --greater_is_better="False"
   --metric_for_best_model="eval_loss"
@@ -104,25 +104,28 @@ args=(
   --writer_batch_size="200" # 1000
   --collator_rename_features="False"
   --validation_split val
-  --test_splits val dev5 
+  --test_splits val fisher_test
+
+  # Fisher context arguments
+  --fisher_context_prefix="Conversation context: "
+  --fisher_context_mode="default"
+  --fisher_max_context=3
+  --fisher_context_trunc_to_shortest
+  --prompt_prefix=' '
+  --prompt_suffix=' Continued transcript: ' 
 
   # Preprocessing related arguments
   --data_preprocessing_config="${RECIPE_DIR}/data_preprocessing_whisper.json"
 
   # Model related arguments
   #--from_pretrained=""
+  #--restart_from="/mnt/matylda6/xsedla1h/projects/huggingface_asr/exp/wsm_olmo1b_stte_w2000_libri_how2/checkpoint-16000/"
 
   --feature_extractor_name="openai/whisper-small.en"
   --base_encoder_model="openai/whisper-small.en"
 
   --tokenizer_name="allenai/OLMo-1B-hf"
   --base_decoder_model="allenai/OLMo-1B-hf"
-  #--prompt_prefix='Transcribe speech to text: '
-  #--prompt_suffix='\nTranscript: ' 
-  #--prompt_tuning_prefix_len=8
-  #--prompt_tuning_suffix_len=4
-  --prompt_tuning_prefix_init='USER: Transcribe speech to text: '
-  --prompt_tuning_suffix_init=' ASSISTANT: '
   
   --connector_type='encoder_stacked'
   --downsampling_factor=5
@@ -137,8 +140,8 @@ args=(
   #--qf_intermediate_size=4096
 
   # Generation related arguments
-  --num_beams="2"
-  --max_new_tokens=150
+  --num_beams="1"
+  --max_new_tokens=200
   --predict_with_generate
   #--no_metrics
 )
@@ -147,5 +150,5 @@ echo "Running training.."
 if [ "$N_GPUS" -gt 1 ]; then
   torchrun --standalone --nnodes=1 --nproc-per-node=$N_GPUS src/trainers/alignment/train_ecd_lm.py "${args[@]}"
 else
-  python src/trainers/alignment/train_ecd_lm.py "${args[@]}"
+  python src/trainers/alignment/train_ecd_lm_fisher_ctx.py "${args[@]}"
 fi

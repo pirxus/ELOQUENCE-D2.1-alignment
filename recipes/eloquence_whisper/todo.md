@@ -1,0 +1,3 @@
+- switching data breaks the mapping
+- try check word embedding alignment
+-

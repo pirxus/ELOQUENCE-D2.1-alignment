@@ -1,0 +1,28 @@
+[
+  {
+    "dataset_name": "/mnt/matylda6/xsedla1h/projects/huggingface_asr/src/dataset_builders/kaldi_dataset/",
+    "dataset_id": "fisher_swbd",
+    "load_from_disk": false,
+    "train_splits": [
+      "train"
+    ],
+    "validation_splits": [
+      "test"
+    ],
+    "test_splits": [
+      "dev"
+    ],
+    "text_column_name": "labels",
+    "audio_column_name": "audio",
+    "length_column_name": "input_len",
+    "text_transformations": [
+      "whisper_normalize_english",
+      "clean_special_tokens_english_train",
+      "transforms_unfinished_words_to_unks_train"
+    ],
+    "additional_args": {
+      "data_dir": "/mnt/matylda5/ipoloka/projects/huggingface_asr/metadata_dirs/fisher_swbd",
+      "splits": []
+    }
+  }
+]
