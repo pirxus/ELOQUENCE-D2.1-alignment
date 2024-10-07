@@ -59,7 +59,7 @@ echo "CUDA_VISIBLE_DEVICES=$CUDA_VISIBLE_DEVICES"
 args=(
   # General training arguments
   --output_dir=$EXPERIMENT_PATH
-  --per_device_train_batch_size="8" # 16
+  --per_device_train_batch_size="10" # 16
   --per_device_eval_batch_size="16" # 24
   --dataloader_num_workers="4"
   #--num_train_epochs="14"
@@ -109,20 +109,24 @@ args=(
   # Fisher context arguments
   --fisher_context_prefix="Conversation context: "
   --fisher_context_mode="default"
-  --fisher_max_context=3
+  --fisher_max_context=4
   --fisher_context_trunc_to_shortest
   --prompt_prefix=' '
-  --prompt_suffix=' Continued transcript: ' 
+  --prompt_suffix=' Transcribe the rest of the conversation: ' 
 
   # Preprocessing related arguments
-  --data_preprocessing_config="${RECIPE_DIR}/data_preprocessing_whisper.json"
+  #--data_preprocessing_config="${RECIPE_DIR}/data_preprocessing_whisper.json"
+  --data_preprocessing_config="${RECIPE_DIR}/data_preprocessing_wavlm.json"
 
   # Model related arguments
   #--from_pretrained=""
   #--restart_from="/mnt/matylda6/xsedla1h/projects/huggingface_asr/exp/wsm_olmo1b_stte_w2000_libri_how2/checkpoint-16000/"
 
-  --feature_extractor_name="openai/whisper-small.en"
-  --base_encoder_model="openai/whisper-small.en"
+  #--feature_extractor_name="openai/whisper-small.en"
+  #--base_encoder_model="openai/whisper-small.en"
+  --feature_extractor_name="microsoft/wavlm-large"
+  --base_encoder_model="microsoft/wavlm-large"
+  --freeze_encoder="True"
 
   --tokenizer_name="allenai/OLMo-1B-hf"
   --base_decoder_model="allenai/OLMo-1B-hf"

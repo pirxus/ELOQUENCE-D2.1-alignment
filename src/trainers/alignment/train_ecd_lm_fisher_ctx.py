@@ -31,6 +31,7 @@ from utilities.training_arguments import (
 
 from models.old_alignment import AlignmentConfig
 from models.aligned_decoder_lm import SpeechEncoderConnectorLMDecoder
+from trainers.alignment.train_ecd_lm import WavLMModelWrapper
 
 from peft import LoraConfig, get_peft_model, replace_lora_weights_loftq
 
@@ -84,12 +85,23 @@ if __name__ == "__main__":
 
     # 3. Instantiate model
     # -- load the asr encoder
-    encoder = WhisperForConditionalGeneration.from_pretrained(
-        model_args.base_encoder_model,
-        torch_dtype=torch.bfloat16,
-        attn_implementation='flash_attention_2',
-    )
-    d_model = encoder.config.d_model
+    if 'whisper' in model_args.base_encoder_model:
+        encoder = WhisperForConditionalGeneration.from_pretrained(
+            model_args.base_encoder_model,
+            torch_dtype=torch.bfloat16,
+            attn_implementation='flash_attention_2',
+        )
+        d_model = encoder.config.d_model
+    elif 'wavlm' in model_args.base_encoder_model:
+        encoder = WavLMModelWrapper.from_pretrained(
+            model_args.base_encoder_model,
+            torch_dtype=torch.bfloat16,
+        )
+        encoder.config.apply_spec_augment = False
+        encoder.config.layer_to_extract = model_args.layer_to_extract
+        d_model = encoder.config.hidden_size
+    else:
+        raise NotImplementedError('only Whisper and WavLm are supported')
 
     decoder = AutoModelForCausalLM.from_pretrained(
         model_args.base_decoder_model,

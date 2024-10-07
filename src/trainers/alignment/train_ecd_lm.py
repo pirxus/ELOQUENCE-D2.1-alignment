@@ -44,6 +44,7 @@ class WavLMWrapperConfig(WavLMConfig):
 
 class WavLMModelWrapper(WavLMModel):
     def __init__(self, config: WavLMWrapperConfig):
+        #config.update({ 'attn_implementation': 'flash_attention_2' })
         super().__init__(config)
 
     def get_encoder(self):
