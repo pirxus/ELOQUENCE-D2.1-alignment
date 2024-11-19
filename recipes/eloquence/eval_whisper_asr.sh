@@ -1,13 +1,13 @@
 #!/bin/bash
-#$ -N eval_whisper_all_beam2
+#$ -N eval_whisper_fisher
 #$ -q all.q@supergpu*
 #$ -l ram_free=40G,mem_free=40G
 #$ -l matylda6=0.1,matylda5=0.1,scratch=0.1
 #$ -l gpu=1,gpu_ram=40G
-#$ -o /mnt/matylda6/xsedla1h/projects/job_logs/asr_eval/eval_whisper_all_beam2.o
-#$ -e /mnt/matylda6/xsedla1h/projects/job_logs/asr_eval/eval_whisper_all_beam2.e
+#$ -o /mnt/matylda6/isedlacek/projects/job_logs/asr_eval/eval_whisper_fisher.o
+#$ -e /mnt/matylda6/isedlacek/projects/job_logs/asr_eval/eval_whisper_fisher.e
 N_GPUS=1
-EXPERIMENT="eval_whisper_all_beam2"
+EXPERIMENT="eval_whisper_fisher"
 
 # Job should finish in about 2 days
 ulimit -t 200000
@@ -21,12 +21,13 @@ ulimit -v unlimited
 ulimit -u 4096
 
 # Initialize environment
-source /mnt/matylda6/xsedla1h/miniconda3/bin/activate /mnt/matylda6/xsedla1h/envs/huggingface_asr
+source /mnt/matylda6/isedlacek/miniconda3/bin/activate /mnt/matylda6/isedlacek/envs/huggingface_asr
 
-WORK_DIR="/mnt/matylda6/xsedla1h/projects/huggingface_asr"
+WORK_DIR="/mnt/matylda6/isedlacek/projects/huggingface_asr"
 EXPERIMENT_PATH="${WORK_DIR}/exp/${EXPERIMENT}"
 RECIPE_DIR="${WORK_DIR}/recipes/eloquence"
-DATASETS="${RECIPE_DIR}/datasets_all.json"
+#DATASETS="${RECIPE_DIR}/datasets_all.json"
+DATASETS="${RECIPE_DIR}/datasets_fisher_ctx.json"
 
 cd $WORK_DIR || {
   echo "No such directory $WORK_DIR"
@@ -39,7 +40,7 @@ export PYTHONPATH="${PYTHONPATH}:${WORK_DIR}/src"
 export TRANSFORMERS_OFFLINE=1
 export HF_DATASETS_OFFLINE=1
 export HF_HUB_OFFLINE=1
-export HF_HOME="/mnt/matylda6/xsedla1h/hugging-face"
+export HF_HOME="/mnt/matylda6/isedlacek/hugging-face"
 
 export WANDB_MODE=offline
 export WANDB_RUN_ID=$EXPERIMENT
@@ -89,8 +90,9 @@ args=(
   --preprocessing_num_workers="16"
   --writer_batch_size="200" # 1000
   --collator_rename_features="False"
-  --validation_split val
-  --test_splits librispeech_test.clean librispeech_test.other how2_val how2_dev5 fleurs_validation fleurs_test slurp_dev slurp_test
+  --validation_split dev
+  --test_splits dev fisher_test
+  #--test_splits librispeech_test.clean librispeech_test.other how2_val how2_dev5 fleurs_validation fleurs_test slurp_dev slurp_test
 
   # Preprocessing related arguments
   --data_preprocessing_config="${WORK_DIR}/configs/default_data_preprocessing_whisper.json"

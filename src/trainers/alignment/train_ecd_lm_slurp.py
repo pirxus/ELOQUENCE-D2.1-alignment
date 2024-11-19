@@ -1,6 +1,6 @@
 """Main training script for the encoder -> connector -> decoder-only LM architecture """
 import sys
-
+from typing import Optional, Union, Tuple
 from transformers import (
     AutoFeatureExtractor,
     AutoModelForCausalLM,
@@ -11,14 +11,18 @@ from transformers import (
     Blip2QFormerConfig,
     WhisperForConditionalGeneration,
     BitsAndBytesConfig,
+    WavLMModel,
+    WavLMConfig,
+    set_seed
 )
+from transformers.modeling_outputs import Wav2Vec2BaseModelOutput
 from transformers.utils import logging
 import torch
 
 from utilities.callbacks import init_callbacks
-from utilities.collators import FisherContextCollatorLeftPadding
+from utilities.collators import SlurpCollator
 from utilities.data_utils import get_dataset
-from utilities.eval_utils import compute_metrics_fisher_turns
+from utilities.eval_utils import compute_metrics_slurp
 from utilities.model_utils import average_checkpoints as average_checkpoints
 from utilities.general_utils import do_evaluate, do_generate
 from utilities.training_arguments import (
@@ -29,11 +33,49 @@ from utilities.training_arguments import (
     ConnectorArguments
 )
 
+set_seed(42)
+
 from models.old_alignment import AlignmentConfig
 from models.aligned_decoder_lm import SpeechEncoderConnectorLMDecoder
-from trainers.alignment.train_ecd_lm import WavLMModelWrapper
+from utilities.training_utils import AdditionalLossTrackerTrainer
 
 from peft import LoraConfig, get_peft_model, replace_lora_weights_loftq
+
+
+class WavLMWrapperConfig(WavLMConfig):
+    layer_to_extract = None
+
+class WavLMModelWrapper(WavLMModel):
+    def __init__(self, config: WavLMWrapperConfig):
+        #config.update({ 'attn_implementation': 'flash_attention_2' })
+        super().__init__(config)
+
+    def get_encoder(self):
+        return self
+
+    def forward(
+        self,
+        input_values: Optional[torch.Tensor],
+        attention_mask: Optional[torch.Tensor] = None,
+        mask_time_indices: Optional[torch.FloatTensor] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+    ) -> Union[Tuple, Wav2Vec2BaseModelOutput]:
+        wav_lm_output = super().forward(
+            input_values=input_values,
+            attention_mask=attention_mask,
+            mask_time_indices=mask_time_indices,
+            output_attentions=output_attentions,
+            output_hidden_states=True,
+            return_dict=return_dict,
+        )
+        if self.config.layer_to_extract is None:
+            return wav_lm_output
+        else:
+            _hidden_state = wav_lm_output.hidden_states[self.config.layer_to_extract]
+            wav_lm_output.last_hidden_state = _hidden_state
+            return wav_lm_output
 
 
 if __name__ == "__main__":
@@ -80,6 +122,7 @@ if __name__ == "__main__":
         training_args.tokenizer_name,
         add_eos_token = True,
     )
+    # correct pad token
     if not hasattr(tokenizer, 'pad_token_id'): # FIXME
         tokenizer.pad_token_id = tokenizer(tokenizer.pad_token)['input_ids'][0]
 
@@ -106,6 +149,7 @@ if __name__ == "__main__":
     decoder = AutoModelForCausalLM.from_pretrained(
         model_args.base_decoder_model,
         torch_dtype=torch.bfloat16,
+        #attn_implementation="flash_attention_2",
     )
 
     # set up lora for the decoder
@@ -143,6 +187,7 @@ if __name__ == "__main__":
                 init_prompt_from_embeds=conn_args.init_prompt_from_embeds,
                 prompt_tuning_prefix_init=conn_args.prompt_tuning_prefix_init,
                 prompt_tuning_suffix_init=conn_args.prompt_tuning_suffix_init,
+                freeze_encoder=model_args.freeze_encoder,
             )
 
     # get the initialization point for the soft prompts if specified so
@@ -191,7 +236,7 @@ if __name__ == "__main__":
     callbacks = init_callbacks(data_args, training_args, dataset, feature_extractor)
 
     # 6. Initialize data collator
-    data_collator = FisherContextCollatorLeftPadding(
+    data_collator = SlurpCollator(
         feature_extractor=feature_extractor,
         tokenizer=tokenizer,
         padding=True,
@@ -199,12 +244,8 @@ if __name__ == "__main__":
         audio_path=data_args.audio_column_name,
         text_path=data_args.text_column_name,
         model_input_name=model.main_input_name,
-        context_prefix=data_args.fisher_context_prefix,
         prompt_prefix=conn_args.prompt_prefix,
-        prompt_suffix=conn_args.prompt_suffix,
-        mode=data_args.fisher_context_mode,
-        max_context=data_args.fisher_max_context,
-        context_trunc_to_shortest=data_args.fisher_context_trunc_to_shortest,
+        use_slots=data_args.slurp_use_slots,
     )
 
     if gen_args.no_metrics:
@@ -212,7 +253,7 @@ if __name__ == "__main__":
         # get the eval loss this way as a metric
         c_metrics = None
     else:
-        c_metrics = lambda pred: compute_metrics_fisher_turns(tokenizer, pred, gen_args.wandb_predictions_to_save, remove_spk_tags=True) 
+        c_metrics = lambda pred: compute_metrics_slurp(tokenizer, pred, gen_args.wandb_predictions_to_save, data_args.slurp_use_slots, data_args.slurp_dump_pred) 
 
     # 7. Initialize trainer
     trainer = Seq2SeqTrainer(

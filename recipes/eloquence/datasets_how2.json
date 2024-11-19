@@ -1,6 +1,6 @@
 [
   {
-    "dataset_name": "/mnt/matylda6/xsedla1h/data/how2",
+    "dataset_name": "/mnt/matylda6/isedlacek/data/how2",
     "dataset_id": "how2",
     "load_from_disk": true,
     "train_splits": [

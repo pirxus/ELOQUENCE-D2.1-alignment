@@ -1,6 +1,6 @@
 [
   {
-    "dataset_name": "/mnt/matylda6/xsedla1h/projects/huggingface_asr/src/dataset_builders/kaldi_dataset/",
+    "dataset_name": "/mnt/matylda6/isedlacek/projects/huggingface_asr/src/dataset_builders/kaldi_dataset/",
     "dataset_id": "fisher_swbd",
     "load_from_disk": false,
     "train_splits": [

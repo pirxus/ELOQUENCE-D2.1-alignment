@@ -10,7 +10,11 @@ import os
 from preprocess_fisher import clean_fisher
 
 def get_start_time(example):
-    example['start_time'] = int(example['uttid'].rpartition('_')[2].partition('-')[0])
+    # NOTE: this messed everything up..
+    if example['uttid'].startswith('fe'):
+        example['start_time'] = int(example['uttid'].split('-')[-2])
+    else:
+        example['start_time'] = int(example['uttid'].rpartition('_')[2].partition('-')[0])
     return example
 
 def process_recording(args):

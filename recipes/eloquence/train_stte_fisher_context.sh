@@ -1,15 +1,13 @@
 #!/bin/bash
-#$ -N wsm_olmo1b_stte_w2000_fisher_context
+#$ -N wlml_stte_olmo1b_context_new_init
 #$ -q long.q@supergpu*
 #$ -l ram_free=40G,mem_free=40G
-#$ -l matylda6=1,scratch=1
+#$ -l matylda6=0.5,scratch=0.5
 #$ -l gpu=2,gpu_ram=20G
-#$ -o /mnt/matylda6/xsedla1h/projects/job_logs/eloquence/wsm_olmo1b_stte_w2000_fisher_context.o
-#$ -e /mnt/matylda6/xsedla1h/projects/job_logs/eloquence/wsm_olmo1b_stte_w2000_fisher_context.e
+#$ -o /mnt/matylda6/isedlacek/projects/job_logs/eloquence/wlml_stte_olmo1b_context_new_init.o
+#$ -e /mnt/matylda6/isedlacek/projects/job_logs/eloquence/wlml_stte_olmo1b_context_new_init.e
 N_GPUS=2
-EXPERIMENT="wsm_olmo1b_stte_w2000_fisher_context"
-N_GPUS=1
-EXPERIMENT="test"
+EXPERIMENT="wlml_stte_olmo1b_context_new_init"
 
 # Job should finish in about 2 days
 ulimit -t 200000
@@ -23,9 +21,9 @@ ulimit -v unlimited
 ulimit -u 4096
 
 # Initialize environment
-source /mnt/matylda6/xsedla1h/miniconda3/bin/activate /mnt/matylda6/xsedla1h/envs/huggingface_asr
+source /mnt/matylda6/isedlacek/miniconda3/bin/activate /mnt/matylda6/isedlacek/envs/huggingface_asr
 
-WORK_DIR="/mnt/matylda6/xsedla1h/projects/huggingface_asr"
+WORK_DIR="/mnt/matylda6/isedlacek/projects/huggingface_asr"
 EXPERIMENT_PATH="${WORK_DIR}/exp/${EXPERIMENT}"
 RECIPE_DIR="${WORK_DIR}/recipes/eloquence"
 #DATASETS="${RECIPE_DIR}/datasets.json"
@@ -33,7 +31,6 @@ RECIPE_DIR="${WORK_DIR}/recipes/eloquence"
 #DATASETS="${RECIPE_DIR}/datasets_lc.json"
 #DATASETS="${RECIPE_DIR}/datasets_how2.json"
 DATASETS="${RECIPE_DIR}/datasets_fisher_ctx.json"
-
 
 cd $WORK_DIR || {
   echo "No such directory $WORK_DIR"
@@ -43,7 +40,7 @@ cd $WORK_DIR || {
 export TRANSFORMERS_OFFLINE=1
 export HF_DATASETS_OFFLINE=1
 export HF_HUB_OFFLINE=1
-export HF_HOME="/mnt/matylda6/xsedla1h/hugging-face"
+export HF_HOME="/mnt/matylda6/isedlacek/hugging-face"
 
 export WANDB_MODE=offline
 export WANDB_RUN_ID=$EXPERIMENT
@@ -59,11 +56,11 @@ echo "CUDA_VISIBLE_DEVICES=$CUDA_VISIBLE_DEVICES"
 args=(
   # General training arguments
   --output_dir=$EXPERIMENT_PATH
-  --per_device_train_batch_size="10" # 16
-  --per_device_eval_batch_size="16" # 24
+  --per_device_train_batch_size="8"   #"12" # 16
+  --per_device_eval_batch_size="8" # 24
   --dataloader_num_workers="4"
   #--num_train_epochs="14"
-  --max_steps="150000"
+  --max_steps="80000"
   --group_by_length="True"
   --bf16
   --bf16_full_eval
@@ -75,13 +72,13 @@ args=(
 
   # Optimizer related arguments
   --optim="adamw_torch"
-  --learning_rate="1e-4"
+  --learning_rate="5e-5"
   --warmup_steps="2000"
   --early_stopping_patience="3"
   --weight_decay="1e-6"
   --max_grad_norm="5.0"
   #--lsm_factor="0.1"
-  --gradient_accumulation_steps="1"
+  --gradient_accumulation_steps="2"
 
   # Logging, saving and evaluation related arguments
   --report_to="wandb"
@@ -107,20 +104,22 @@ args=(
   --test_splits val fisher_test
 
   # Fisher context arguments
-  --fisher_context_prefix="Conversation context: "
+  --fisher_context_prefix="Previous conversation context: "
   --fisher_context_mode="default"
-  --fisher_max_context=4
-  --fisher_context_trunc_to_shortest
+  --fisher_max_context=3
+  #--fisher_context_trunc_to_shortest
   --prompt_prefix=' '
-  --prompt_suffix=' Transcribe the rest of the conversation: ' 
+  --prompt_suffix='\nContinuted transcript: ' 
 
   # Preprocessing related arguments
   #--data_preprocessing_config="${RECIPE_DIR}/data_preprocessing_whisper.json"
   --data_preprocessing_config="${RECIPE_DIR}/data_preprocessing_wavlm.json"
 
   # Model related arguments
-  #--from_pretrained=""
-  #--restart_from="/mnt/matylda6/xsedla1h/projects/huggingface_asr/exp/wsm_olmo1b_stte_w2000_libri_how2/checkpoint-16000/"
+  #--from_pretrained="/mnt/matylda6/isedlacek/projects/huggingface_asr/exp/wsm_olmo1b_stte_w2000_fisher_wavlm/checkpoint-26000"
+  #--from_pretrained="/mnt/matylda6/isedlacek/projects/huggingface_asr/exp/wsm_olmo1b_stte_w2000_libri_how2_cont/checkpoint-42000"
+  #--restart_from="/mnt/matylda6/isedlacek/projects/huggingface_asr/exp/wsm_olmo1b_stte_w2000_libri_how2/checkpoint-16000/"
+  --from_pretrained="/mnt/matylda6/isedlacek/projects/huggingface_asr/exp/wlml_stte_olmo1b_context_turns_fixed/checkpoint-40000"
 
   #--feature_extractor_name="openai/whisper-small.en"
   #--base_encoder_model="openai/whisper-small.en"
@@ -132,7 +131,7 @@ args=(
   --base_decoder_model="allenai/OLMo-1B-hf"
   
   --connector_type='encoder_stacked'
-  --downsampling_factor=5
+  --downsampling_factor=6
   --conn_hidden_size=1024
   --conn_layers=2
   --conn_attn_heads=16
@@ -144,15 +143,15 @@ args=(
   #--qf_intermediate_size=4096
 
   # Generation related arguments
-  --num_beams="1"
-  --max_new_tokens=200
+  --num_beams="2"
+  --max_new_tokens=170
   --predict_with_generate
   #--no_metrics
 )
 
 echo "Running training.."
 if [ "$N_GPUS" -gt 1 ]; then
-  torchrun --standalone --nnodes=1 --nproc-per-node=$N_GPUS src/trainers/alignment/train_ecd_lm.py "${args[@]}"
+  torchrun --standalone --nnodes=1 --nproc-per-node=$N_GPUS src/trainers/alignment/train_ecd_lm_fisher_ctx.py "${args[@]}"
 else
   python src/trainers/alignment/train_ecd_lm_fisher_ctx.py "${args[@]}"
 fi

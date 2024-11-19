@@ -1,13 +1,13 @@
 #!/bin/bash
-#$ -N eval_slurp_wsm_olmo1b_stlin_w1000_how2
-#$ -q short.q@supergpu*
+#$ -N wlml_stte_olmo1b_slurp_asr_slots
+#$ -q long.q@supergpu*
 #$ -l ram_free=40G,mem_free=40G
-#$ -l matylda6=1,scratch=0.1
+#$ -l matylda6=0.5,scratch=0.2
 #$ -l gpu=1,gpu_ram=20G
-#$ -o /mnt/matylda6/isedlacek/projects/job_logs/eloquence/eval_slurp_wsm_olmo1b_stlin_w1000_how2.o
-#$ -e /mnt/matylda6/isedlacek/projects/job_logs/eloquence/eval_slurp_wsm_olmo1b_stlin_w1000_how2.e
+#$ -o /mnt/matylda6/isedlacek/projects/job_logs/eloquence/wlml_stte_olmo1b_slurp_asr_slots.o
+#$ -e /mnt/matylda6/isedlacek/projects/job_logs/eloquence/wlml_stte_olmo1b_slurp_asr_slots.e
 N_GPUS=1
-EXPERIMENT="eval_slurp_wsm_olmo1b_stlin_w1000_how2"
+EXPERIMENT="wlml_stte_olmo1b_slurp_asr_slots"
 
 # Job should finish in about 2 days
 ulimit -t 200000
@@ -27,9 +27,12 @@ WORK_DIR="/mnt/matylda6/isedlacek/projects/huggingface_asr"
 EXPERIMENT_PATH="${WORK_DIR}/exp/${EXPERIMENT}"
 RECIPE_DIR="${WORK_DIR}/recipes/eloquence"
 #DATASETS="${RECIPE_DIR}/datasets.json"
+#DATASETS="${RECIPE_DIR}/datasets_libri_how2.json"
 #DATASETS="${RECIPE_DIR}/datasets_lc.json"
 #DATASETS="${RECIPE_DIR}/datasets_how2.json"
+#DATASETS="${RECIPE_DIR}/datasets_fisher_ctx.json"
 DATASETS="${RECIPE_DIR}/datasets_slurp.json"
+
 
 cd $WORK_DIR || {
   echo "No such directory $WORK_DIR"
@@ -56,14 +59,14 @@ args=(
   # General training arguments
   --output_dir=$EXPERIMENT_PATH
   --per_device_train_batch_size="16" # 20
-  --per_device_eval_batch_size="24" # 24
+  --per_device_eval_batch_size="16" # 24
   --dataloader_num_workers="4"
-  --num_train_epochs="14"
-  #--max_steps="150000"
+  #--num_train_epochs="14"
+  --max_steps="50000"
   --group_by_length="True"
   --bf16
   --bf16_full_eval
-  #--do_train
+  --do_train
   --do_evaluate
   --load_best_model_at_end
   --qformer_eval_callback
@@ -71,13 +74,13 @@ args=(
 
   # Optimizer related arguments
   --optim="adamw_torch"
-  --learning_rate="1e-4"
-  --warmup_steps="1000"
+  --learning_rate="5e-5"
+  --warmup_steps="2000"
   --early_stopping_patience="3"
   --weight_decay="1e-6"
   --max_grad_norm="5.0"
   #--lsm_factor="0.1"
-  --gradient_accumulation_steps="1"
+  --gradient_accumulation_steps="2"
 
   # Logging, saving and evaluation related arguments
   --report_to="wandb"
@@ -99,45 +102,52 @@ args=(
   --preprocessing_num_workers="16"
   --writer_batch_size="200" # 1000
   --collator_rename_features="False"
-  --validation_split validation
-  --test_splits validation slurp_test
+  --validation_split dev
+  --test_splits dev slurp_test
 
+  --slurp_use_slots
+  --slurp_dump_pred
+  
   # Preprocessing related arguments
-  --data_preprocessing_config="${RECIPE_DIR}/data_preprocessing_whisper.json"
+  #--data_preprocessing_config="${RECIPE_DIR}/data_preprocessing_whisper.json"
+  --data_preprocessing_config="${RECIPE_DIR}/data_preprocessing_wavlm.json"
 
   # Model related arguments
-  --from_pretrained="/mnt/matylda6/isedlacek/projects/huggingface_asr/exp/wsm_olmo1b_stlin_w1000_how2/checkpoint-11000"
+  #--from_pretrained=""
+  #--restart_from="/mnt/matylda6/isedlacek/projects/huggingface_asr/exp/wsm_olmo1b_stte_w2000_libri_how2/checkpoint-16000/"
+  --from_pretrained="/mnt/matylda6/isedlacek/projects/huggingface_asr/exp/wlml_stte_olmo1b_context_turns_fixed/checkpoint-40000"
 
-  --feature_extractor_name="openai/whisper-small.en"
-  --base_encoder_model="openai/whisper-small.en"
+  #--feature_extractor_name="openai/whisper-small.en"
+  #--base_encoder_model="openai/whisper-small.en"
+  --feature_extractor_name="microsoft/wavlm-large"
+  --base_encoder_model="microsoft/wavlm-large"
+  --freeze_encoder="True"
 
   --tokenizer_name="allenai/OLMo-1B-hf"
   --base_decoder_model="allenai/OLMo-1B-hf"
-  --prompt_prefix='Transcribe speech to text: '
-  --prompt_suffix='\nTranscript: ' 
   
-  #--connector_type='encoder_stacked'
-  #--downsampling_factor=5
-  #--conn_hidden_size=1024
-  #--conn_layers=2
-  #--conn_attn_heads=16
-  #--qf_intermediate_size=4096
-  
-  --connector_type='linear_stacked'
-  --downsampling_factor=5
-  --conn_hidden_size=2048
+  --connector_type='encoder_stacked'
+  --downsampling_factor=6
+  --conn_hidden_size=1024
+  --conn_layers=2
+  --conn_attn_heads=16
   --qf_intermediate_size=4096
+  
+  #--connector_type='linear_stacked'
+  #--downsampling_factor=5
+  #--conn_hidden_size=2048
+  #--qf_intermediate_size=4096
 
   # Generation related arguments
   --num_beams="2"
-  --max_new_tokens=150
+  --max_new_tokens=170
   --predict_with_generate
   #--no_metrics
 )
 
 echo "Running training.."
 if [ "$N_GPUS" -gt 1 ]; then
-  torchrun --standalone --nnodes=1 --nproc-per-node=$N_GPUS src/trainers/alignment/train_ecd_lm.py "${args[@]}"
+  torchrun --standalone --nnodes=1 --nproc-per-node=$N_GPUS src/trainers/alignment/train_ecd_lm_slurp.py "${args[@]}"
 else
-  python src/trainers/alignment/train_ecd_lm.py "${args[@]}"
+  python src/trainers/alignment/train_ecd_lm_slurp.py "${args[@]}"
 fi

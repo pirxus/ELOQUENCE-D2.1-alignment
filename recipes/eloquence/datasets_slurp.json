@@ -1,10 +1,11 @@
 [
   {
-    "dataset_name": "/mnt/scratch/tmp/xsedla1h/slurp",
+    "dataset_name": "/mnt/matylda6/isedlacek/data/slurp",
     "dataset_id": "slurp",
     "load_from_disk": true,
     "train_splits": [
-      "train"
+      "train",
+      "train_synthetic"
     ],
     "validation_splits": [
       "dev"
@@ -22,4 +23,3 @@
     }
   }
 ]
-

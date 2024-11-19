@@ -265,6 +265,12 @@ class DataTrainingArguments:
     fisher_context_trunc_to_shortest: Optional[bool] = field(
         default=False, metadata={"help": "Whether to truncate the fisher context to the shortest context length in the batch."}
     )
+    slurp_use_slots: Optional[bool] = field(
+        default=False, metadata={"help": "Whether to train for SLURP slot filling."}
+    )
+    slurp_dump_pred: Optional[bool] = field(
+        default=False, metadata={"help": "Whether to dump all predictions into the wandb file.."}
+    )
 
 
 

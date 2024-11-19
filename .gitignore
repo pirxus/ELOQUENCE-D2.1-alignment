@@ -3,3 +3,4 @@ wandb/
 exp/
 .ipynb_checkpoints/
 recipes/chime_alignment/
+pyrightconfig*

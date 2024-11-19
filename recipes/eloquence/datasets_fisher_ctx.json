@@ -1,6 +1,6 @@
 [
   {
-    "dataset_name": "/mnt/scratch/tmp/xsedla1h/fisher_context",
+    "dataset_name": "/mnt/scratch/tmp/isedlacek/xsedla1h/fisher_context",
     "dataset_id": "fisher",
     "load_from_disk": true,
     "train_splits": [

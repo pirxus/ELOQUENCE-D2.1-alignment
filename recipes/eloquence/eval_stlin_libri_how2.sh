@@ -4,8 +4,8 @@
 #$ -l ram_free=40G,mem_free=40G
 #$ -l matylda6=1,scratch=1,matylda5=0.1
 #$ -l gpu=1,gpu_ram=20G
-#$ -o /mnt/matylda6/xsedla1h/projects/job_logs/eloquence/eval_slurp_wsm_olmo1b_stlin_w2000_libri_how2.o
-#$ -e /mnt/matylda6/xsedla1h/projects/job_logs/eloquence/eval_slurp_wsm_olmo1b_stlin_w2000_libri_how2.e
+#$ -o /mnt/matylda6/isedlacek/projects/job_logs/eloquence/eval_slurp_wsm_olmo1b_stlin_w2000_libri_how2.o
+#$ -e /mnt/matylda6/isedlacek/projects/job_logs/eloquence/eval_slurp_wsm_olmo1b_stlin_w2000_libri_how2.e
 N_GPUS=1
 EXPERIMENT="eval_slurp_wsm_olmo1b_stlin_w2000_libri_how2"
 
@@ -21,9 +21,9 @@ ulimit -v unlimited
 ulimit -u 4096
 
 # Initialize environment
-source /mnt/matylda6/xsedla1h/miniconda3/bin/activate /mnt/matylda6/xsedla1h/envs/huggingface_asr
+source /mnt/matylda6/isedlacek/miniconda3/bin/activate /mnt/matylda6/isedlacek/envs/huggingface_asr
 
-WORK_DIR="/mnt/matylda6/xsedla1h/projects/huggingface_asr"
+WORK_DIR="/mnt/matylda6/isedlacek/projects/huggingface_asr"
 EXPERIMENT_PATH="${WORK_DIR}/exp/${EXPERIMENT}"
 RECIPE_DIR="${WORK_DIR}/recipes/eloquence"
 #DATASETS="${RECIPE_DIR}/datasets.json"
@@ -41,7 +41,7 @@ cd $WORK_DIR || {
 export TRANSFORMERS_OFFLINE=1
 export HF_DATASETS_OFFLINE=1
 export HF_HUB_OFFLINE=1
-export HF_HOME="/mnt/matylda6/xsedla1h/hugging-face"
+export HF_HOME="/mnt/matylda6/isedlacek/hugging-face"
 
 export WANDB_MODE=offline
 export WANDB_RUN_ID=$EXPERIMENT
@@ -108,7 +108,7 @@ args=(
   --data_preprocessing_config="${RECIPE_DIR}/data_preprocessing_whisper.json"
 
   # Model related arguments
-  --from_pretrained="/mnt/matylda6/xsedla1h/projects/huggingface_asr/exp/wsm_olmo1b_stlin_w2000_libri_how2/checkpoint-30000"
+  --from_pretrained="/mnt/matylda6/isedlacek/projects/huggingface_asr/exp/wsm_olmo1b_stlin_w2000_libri_how2/checkpoint-30000"
 
   --feature_extractor_name="openai/whisper-small.en"
   --base_encoder_model="openai/whisper-small.en"

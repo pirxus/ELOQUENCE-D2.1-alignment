@@ -12,7 +12,8 @@ from transformers import (
     WhisperForConditionalGeneration,
     BitsAndBytesConfig,
     WavLMModel,
-    WavLMConfig
+    WavLMConfig,
+    set_seed
 )
 from transformers.modeling_outputs import Wav2Vec2BaseModelOutput
 from transformers.utils import logging
@@ -31,6 +32,8 @@ from utilities.training_arguments import (
     ModelArguments,
     ConnectorArguments
 )
+
+set_seed(42)
 
 from models.old_alignment import AlignmentConfig
 from models.aligned_decoder_lm import SpeechEncoderConnectorLMDecoder

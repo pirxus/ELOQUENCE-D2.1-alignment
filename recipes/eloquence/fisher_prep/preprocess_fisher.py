@@ -8,12 +8,12 @@ logger = get_logger('transformers')
 
 def clean_train_split(example):
     example['labels'] = re.sub(' +', ' ', example['labels'].replace('[laughter]', '').replace('[noise]', ''))
-    example['labels'] = example['labels'].replace('_', ' ')
+    example['labels'] = example['labels'].replace('_', ' ').strip()
     return example
 
 def clean_dev_test_split(example):
     example['labels'] = re.sub(' +', ' ', example['labels'].replace('(%HESITATION)', ''))
-    example['labels'] = example['labels'].translate(str.maketrans("", "", "()")).lower()
+    example['labels'] = example['labels'].translate(str.maketrans("", "", "()")).lower().strip()
     return example
 
 def clean_fisher(dataset, num_cores):

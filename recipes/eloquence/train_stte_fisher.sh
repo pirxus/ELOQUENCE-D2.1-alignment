@@ -1,13 +1,13 @@
 #!/bin/bash
-#$ -N wsm_olmo1b_stte_w2000_fisher
+#$ -N wsm_olmo1b_stte_w2000_fisher_wavlmbp
 #$ -q long.q@supergpu*
 #$ -l ram_free=40G,mem_free=40G
 #$ -l matylda6=1,scratch=1
 #$ -l gpu=2,gpu_ram=20G
-#$ -o /mnt/matylda6/xsedla1h/projects/job_logs/eloquence/wsm_olmo1b_stte_w2000_fisher.o
-#$ -e /mnt/matylda6/xsedla1h/projects/job_logs/eloquence/wsm_olmo1b_stte_w2000_fisher.e
+#$ -o /mnt/matylda6/isedlacek/projects/job_logs/eloquence/wsm_olmo1b_stte_w2000_fisher_wavlmbp.o
+#$ -e /mnt/matylda6/isedlacek/projects/job_logs/eloquence/wsm_olmo1b_stte_w2000_fisher_wavlmbp.e
 N_GPUS=2
-EXPERIMENT="wsm_olmo1b_stte_w2000_fisher"
+EXPERIMENT="wsm_olmo1b_stte_w2000_fisher_wavlmbp"
 
 # Job should finish in about 2 days
 ulimit -t 200000
@@ -21,9 +21,9 @@ ulimit -v unlimited
 ulimit -u 4096
 
 # Initialize environment
-source /mnt/matylda6/xsedla1h/miniconda3/bin/activate /mnt/matylda6/xsedla1h/envs/huggingface_asr
+source /mnt/matylda6/isedlacek/miniconda3/bin/activate /mnt/matylda6/isedlacek/envs/huggingface_asr
 
-WORK_DIR="/mnt/matylda6/xsedla1h/projects/huggingface_asr"
+WORK_DIR="/mnt/matylda6/isedlacek/projects/huggingface_asr"
 EXPERIMENT_PATH="${WORK_DIR}/exp/${EXPERIMENT}"
 RECIPE_DIR="${WORK_DIR}/recipes/eloquence"
 #DATASETS="${RECIPE_DIR}/datasets.json"
@@ -41,7 +41,7 @@ cd $WORK_DIR || {
 export TRANSFORMERS_OFFLINE=1
 export HF_DATASETS_OFFLINE=1
 export HF_HUB_OFFLINE=1
-export HF_HOME="/mnt/matylda6/xsedla1h/hugging-face"
+export HF_HOME="/mnt/matylda6/isedlacek/hugging-face"
 
 export WANDB_MODE=offline
 export WANDB_RUN_ID=$EXPERIMENT
@@ -59,7 +59,7 @@ args=(
   --output_dir=$EXPERIMENT_PATH
   --per_device_train_batch_size="16" # 20
   --per_device_eval_batch_size="24" # 24
-  --dataloader_num_workers="4"
+  --dataloader_num_workers="8"
   #--num_train_epochs="14"
   --max_steps="150000"
   --group_by_length="True"
@@ -105,22 +105,28 @@ args=(
   --test_splits val fisher_test
 
   # Preprocessing related arguments
-  --data_preprocessing_config="${RECIPE_DIR}/data_preprocessing_whisper.json"
+  #--data_preprocessing_config="${RECIPE_DIR}/data_preprocessing_whisper.json"
+  --data_preprocessing_config="${RECIPE_DIR}/data_preprocessing_wavlm.json"
 
   # Model related arguments
   #--from_pretrained=""
-  #--restart_from="/mnt/matylda6/xsedla1h/projects/huggingface_asr/exp/wsm_olmo1b_stte_w2000_libri_how2/checkpoint-16000/"
+  #--restart_from="/mnt/matylda6/isedlacek/projects/huggingface_asr/exp/wsm_olmo1b_stte_w2000_libri_how2/checkpoint-16000/"
 
-  --feature_extractor_name="openai/whisper-small.en"
-  --base_encoder_model="openai/whisper-small.en"
+  #--feature_extractor_name="openai/whisper-small.en"
+  #--base_encoder_model="openai/whisper-small.en"
+  #--feature_extractor_name="microsoft/wavlm-large"
+  #--base_encoder_model="microsoft/wavlm-large"
+  --feature_extractor_name="microsoft/wavlm-base-plus"
+  --base_encoder_model="microsoft/wavlm-base-plus"
+  --freeze_encoder="True"
 
   --tokenizer_name="allenai/OLMo-1B-hf"
   --base_decoder_model="allenai/OLMo-1B-hf"
-  --prompt_prefix='Transcribe the following speech: '
-  --prompt_suffix='\nTranscript: ' 
+  --prompt_prefix='USER: Transcribe this speech. '
+  --prompt_suffix='\nASSISTANT: ' 
   
   --connector_type='encoder_stacked'
-  --downsampling_factor=5
+  --downsampling_factor=6
   --conn_hidden_size=1024
   --conn_layers=2
   --conn_attn_heads=16
