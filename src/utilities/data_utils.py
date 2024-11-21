@@ -135,6 +135,9 @@ def transforms_unfinished_words_to_unks(example: str, label_column: str) -> Dict
     return {label_column: re.sub(r"\(?\w+-\)?", "([unk])", example)}
 
 
+def fisher_ctx_flatten_labels(example: List[str], label_column: str) -> Dict[str, str]:
+    return {label_column: ' '.join(example)}
+
 tedlium_contractions = [" 's", " 't", " 're", " 've", " 'm", " 'll", " 'd", " 'clock", " 'all"]
 
 
@@ -432,6 +435,8 @@ def load_multiple_datasets(
     global_validation_split: str,
     split_long_segments_to_chunks: bool,
     load_pure_dataset_only: bool = False,
+    add_context_column: bool = True,
+    flatten_fisher: bool = False,
 ) -> DatasetDict:
     """Loads multiple datasets, preprocess them and join to single dataset instance."""
     with open(config_path) as config_handle:
@@ -496,14 +501,45 @@ def load_multiple_datasets(
             if dataset_config.get(column) is not None and dataset_config.get(column) != global_column:
                 dataset_processed = dataset_processed.rename_column(dataset_config.get(column), global_column)
 
-        if len(config_dict) > 1: # FIXME: maybe this is not the ideal way..
-            dataset_local = dataset_processed.remove_columns(
-                list(
-                    set()
-                    .union(*dataset_processed.column_names.values())
-                    .difference([global_len_column, global_text_column, global_audio_column])
+        # TODO: this is a temporary fix for the fisher dataset, where the text column is a list of strings
+        if flatten_fisher and len(config_dict) > 1 and 'fisher' in dataset_config.get('dataset_id'):
+            if isinstance(dataset_processed[list(dataset_processed.keys())[-1]][0][global_text_column], list):
+                dataset_processed = distributed_process(
+                    dataset_processed,
+                    process_by="map",
+                    function=fisher_ctx_flatten_labels,
+                    input_columns=[global_text_column],
+                    writer_batch_size=writer_batch_size,
+                    num_proc=num_proc,
+                    fn_kwargs={"label_column": "dummy_label"},
+                    desc="Flattening fisher labels",
                 )
-            )
+                dataset_processed = dataset_processed.remove_columns([global_text_column])
+                dataset_processed = dataset_processed.rename_column('dummy_label', global_text_column)
+
+        if len(config_dict) > 1: # FIXME: maybe this is not the ideal way..
+            if add_context_column:
+                dataset_local = dataset_processed.remove_columns(
+                    list(
+                        set()
+                        .union(*dataset_processed.column_names.values())
+                        .difference([global_len_column, global_text_column, global_audio_column, 'context'])
+                    )
+                )
+
+                # Add an empty context column if necessary so that it is possible to merge datasets
+                for split in dataset_local.keys():
+                    if not 'context' in dataset_local[split].column_names:
+                        dataset_local[split] = dataset_local[split].add_column('context', [None] * len(dataset_local[split]))
+
+            else:
+                dataset_local = dataset_processed.remove_columns(
+                    list(
+                        set()
+                        .union(*dataset_processed.column_names.values())
+                        .difference([global_len_column, global_text_column, global_audio_column])
+                    )
+                )
         else:
             dataset_local = dataset_processed
 
@@ -578,6 +614,7 @@ def get_dataset(
     dump_prepared_dataset: Optional[str] = None,
     dataset_shard_size: Optional[str] = None,
     load_pure_dataset_only: bool = False,
+    flatten_fisher: bool = False,
 ) -> Tuple[DatasetDict, Dataset]:
     """Loads single or multiple datasets, preprocess, and merge them."""
     if datasets_creation_config_path is not None:
@@ -595,6 +632,7 @@ def get_dataset(
             global_validation_split=validation_split,
             split_long_segments_to_chunks=split_long_segments_to_chunks,
             load_pure_dataset_only=load_pure_dataset_only,
+            flatten_fisher=flatten_fisher,
         )
     else:
         with DistributedContext() as context:
